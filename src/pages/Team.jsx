@@ -75,7 +75,7 @@ export default function Team({ profile }) {
                     </div>
                   ) : (
                     <>
-                      <Link to={`/employee/${a.employee_id}`}><button className="secondary small">View</button></Link>{' '}
+                      <Link to={`/record/${a.id}`}><button className="secondary small">View completed</button></Link>{' '}
                       <button className="small" disabled={busyId === a.id} onClick={() => signOff(a)}>Sign off</button>{' '}
                       <button className="danger small" onClick={() => setRej({ id: a.id, reason: '' })}>Return</button>
                     </>

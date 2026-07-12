@@ -142,7 +142,7 @@ export default function EmployeeDetail({ profile }) {
                       </div>
                     ) : (
                       <>
-                        {a.status === 'completed' && <Link to={`/record/${a.id}`}>View / print</Link>}{' '}
+                        {['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}{' '}
                         {['completed', 'awaiting_review'].includes(a.status) && <button className="danger small" onClick={() => setRej({ id: a.id, reason: '' })}>Return</button>}
                       </>
                     )}
