@@ -96,8 +96,15 @@ export default function EmployeeDetail({ profile }) {
   }
 
   if (!emp) return <p className="muted">Loading…</p>
+  const byDoc = {}
+  for (const a of assignments) { (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
+  const current = [], superseded = []
+  for (const list of Object.values(byDoc)) {
+    list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at))
+    current.push(list[0]); superseded.push(...list.slice(1))
+  }
   const byCat = {}
-  for (const a of assignments) {
+  for (const a of current) {
     const c = a.documents?.document_categories?.name || 'Other'
     ;(byCat[c] = byCat[c] || []).push(a)
   }
@@ -152,8 +159,24 @@ export default function EmployeeDetail({ profile }) {
             </tbody></table>
           </div>
         ))}
-        {assignments.length === 0 && <p className="muted">No assignments yet.</p>}
+        {current.length === 0 && <p className="muted">No assignments yet.</p>}
       </div>
+
+      {superseded.length > 0 && (
+        <div className="card">
+          <h2>Previous / superseded records ({superseded.length})</h2>
+          <p className="muted">Earlier completions, kept for the record when a document was re-issued or a new version published.</p>
+          <table><tbody>
+            {superseded.map(a => (
+              <tr key={a.id}>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td><StatusBadge assignment={a} /></td>
+                <td style={{ textAlign: 'right' }}>{['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
 
       <div className="card">
         <h2>Licences</h2>

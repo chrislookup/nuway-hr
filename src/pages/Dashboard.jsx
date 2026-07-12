@@ -30,11 +30,15 @@ export default function Dashboard({ profile }) {
 
   if (!assignments) return <p className="muted">Loading…</p>
 
-  const done = assignments.filter(a => a.status === 'completed').length
-  const overdue = assignments.filter(isOverdue).length
-  const awaiting = assignments.filter(a => a.status === 'awaiting_review').length
-  const open = assignments.filter(a => !['completed', 'expired'].includes(a.status))
-  const pct = assignments.length ? Math.round(done / assignments.length * 100) : 0
+  const byDoc = {}
+  for (const a of assignments) { (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
+  const current = [], superseded = []
+  for (const list of Object.values(byDoc)) { list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at)); current.push(list[0]); superseded.push(...list.slice(1)) }
+  const done = current.filter(a => a.status === 'completed').length
+  const overdue = current.filter(isOverdue).length
+  const awaiting = current.filter(a => a.status === 'awaiting_review').length
+  const open = current.filter(a => !['completed', 'expired'].includes(a.status))
+  const pct = current.length ? Math.round(done / current.length * 100) : 0
 
   const groupByCat = (list) => {
     const g = {}
@@ -44,7 +48,7 @@ export default function Dashboard({ profile }) {
 
   // training matrix: group by category
   const byCat = {}
-  for (const a of assignments) {
+  for (const a of current) {
     const cat = a.documents?.document_categories?.name || 'Other'
     byCat[cat] = byCat[cat] || { total: 0, done: 0 }
     byCat[cat].total++
@@ -125,7 +129,7 @@ export default function Dashboard({ profile }) {
         <div className="card">
           <h2>My completed records</h2>
           <table className="listgrouped"><tbody>
-            {Object.entries(groupByCat(assignments.filter(a => a.status === 'completed'))).map(([cat, items]) => (
+            {Object.entries(groupByCat(current.filter(a => a.status === 'completed'))).map(([cat, items]) => (
               <Fragment key={cat}>
                 <tr className="cathead"><td colSpan={3}>{cat}</td></tr>
                 {items.map(a => (
@@ -136,6 +140,22 @@ export default function Dashboard({ profile }) {
                   </tr>
                 ))}
               </Fragment>
+            ))}
+          </tbody></table>
+        </div>
+      )}
+
+      {superseded.length > 0 && (
+        <div className="card">
+          <h2>Previous records ({superseded.length})</h2>
+          <p className="muted">Earlier completions kept for your record after a document was updated or re-issued.</p>
+          <table><tbody>
+            {superseded.map(a => (
+              <tr key={a.id}>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td className="muted">{fmtDate(a.completed_at)}</td>
+                <td style={{ textAlign: 'right' }}>{['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}</td>
+              </tr>
             ))}
           </tbody></table>
         </div>
