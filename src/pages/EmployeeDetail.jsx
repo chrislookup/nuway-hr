@@ -16,6 +16,7 @@ export default function EmployeeDetail({ profile }) {
   const [imp, setImp] = useState({ document_id: '', signed_at: '', file: null })
   const [impMsg, setImpMsg] = useState('')
   const [impBusy, setImpBusy] = useState(false)
+  const [rej, setRej] = useState({ id: null, reason: '' })
 
   async function load() {
     const { data: e } = await supabase.from('profiles')
@@ -48,6 +49,16 @@ export default function EmployeeDetail({ profile }) {
     const { error } = await supabase.from('licences').insert({ ...lic, expiry_date: lic.expiry_date || null, employee_id: id, verified_by: profile.id, verified_at: new Date().toISOString() })
     setMsg(error ? error.message : 'Licence added.')
     setLic({ licence_type_id: '', licence_number: '', expiry_date: '' }); load()
+  }
+
+  async function returnDoc(a) {
+    if (!rej.reason.trim()) return
+    const { error } = await supabase.from('assignments').update({
+      status: 'rejected', rejection_reason: rej.reason.trim(),
+      reviewed_by: profile.id, reviewed_at: new Date().toISOString(), completed_at: null,
+    }).eq('id', a.id)
+    setMsg(error ? error.message : 'Document returned to the employee for correction.')
+    setRej({ id: null, reason: '' }); load()
   }
 
   async function importRecord() {
@@ -122,7 +133,20 @@ export default function EmployeeDetail({ profile }) {
                   <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
                   <td className="muted">due {fmtDate(a.due_date)}</td>
                   <td><StatusBadge assignment={a} /></td>
-                  <td style={{ textAlign: 'right' }}>{a.status === 'completed' && <Link to={`/record/${a.id}`}>View / print</Link>}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {rej.id === a.id ? (
+                      <div className="row" style={{ justifyContent: 'flex-end' }}>
+                        <input autoFocus placeholder="Reason for returning…" value={rej.reason} onChange={e => setRej({ ...rej, reason: e.target.value })} style={{ width: 200 }} />
+                        <button className="danger small" disabled={!rej.reason.trim()} onClick={() => returnDoc(a)}>Confirm</button>
+                        <button className="secondary small" onClick={() => setRej({ id: null, reason: '' })}>Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        {a.status === 'completed' && <Link to={`/record/${a.id}`}>View / print</Link>}{' '}
+                        {['completed', 'awaiting_review'].includes(a.status) && <button className="danger small" onClick={() => setRej({ id: a.id, reason: '' })}>Return</button>}
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody></table>
