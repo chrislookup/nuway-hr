@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import FormBuilder from '../components/FormBuilder'
 import { supabase, CAPABILITIES } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
@@ -27,6 +28,7 @@ function Documents() {
   const [version, setVersion] = useState(null)
   const [file, setFile] = useState(null)
   const [mediaUrl, setMediaUrl] = useState('')
+  const [pages, setPages] = useState([])
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -39,14 +41,14 @@ function Documents() {
   useEffect(() => { load() }, [])
 
   async function openEdit(d) {
-    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl('')
+    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([])
     if (d?.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
-      setVersion(v || null); setMediaUrl(v?.media_url || '')
+      setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || [])
     }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl('')
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([])
     setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -81,8 +83,10 @@ function Documents() {
       if (fe) { setMsg('File upload failed: ' + fe.message); setBusy(false); return }
       pdf_path = path
     }
-    if (versionId && (file || mediaUrl || version)) {
-      await supabase.from('document_versions').update({ pdf_path, media_url: mediaUrl || null }).eq('id', versionId)
+    if (versionId && (file || mediaUrl || version || edit.doc_type === 'web_form')) {
+      const vpatch = { pdf_path, media_url: mediaUrl || null }
+      if (edit.doc_type === 'web_form') vpatch.form_schema = pages.length ? { type: 'guided', pages } : null
+      await supabase.from('document_versions').update(vpatch).eq('id', versionId)
     }
 
     setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
@@ -138,6 +142,13 @@ function Documents() {
               <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} placeholder="https://nuway.com.au/…" />
             </div>
           </div>
+
+          {edit.doc_type === 'web_form' && (
+            <div style={{ marginTop: 14 }}>
+              <label>Form content (no code — build the sections your staff will complete)</label>
+              <FormBuilder pages={pages} onChange={setPages} />
+            </div>
+          )}
 
           <label style={{ marginTop: 10 }}>Conditions (JSON — e.g. {'{'}"employment_type":["casual"]{'}'} or {'{'}"locations":["Logan"]{'}'})</label>
           <input value={edit.conditions ? JSON.stringify(edit.conditions) : ''} onChange={e => {
@@ -320,6 +331,11 @@ function People({ profile }) {
     setSel({ ...sel, status: 'active' }); setMsg('Employee reactivated — portal access restored.'); load()
   }
 
+  async function toggleCanAssess(v) {
+    await supabase.from('profiles').update({ can_assess: v }).eq('id', sel.id)
+    setSel({ ...sel, can_assess: v }); load()
+  }
+
   const shown = people
     .filter(p => filt === 'all' ? true : filt === 'past' ? p.status !== 'active' : p.status === 'active')
     .sort((a, b) => (locName(a).localeCompare(locName(b))) || `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
@@ -366,6 +382,10 @@ function People({ profile }) {
                 <button key={t} className={`small ${sel.tier === t ? '' : 'secondary'}`} onClick={() => setTier(t)} disabled={sel.id === profile.id}>{t}</button>
               ))}
             </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400, marginTop: 12 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={!!sel.can_assess} onChange={e => toggleCanAssess(e.target.checked)} />
+              Competent to assess / sign off practical training
+            </label>
             {sel.tier === 'manager' && (<>
               <label>Manages locations</label>
               <div className="checkgrid">
