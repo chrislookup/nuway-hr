@@ -23,7 +23,7 @@ export default function EmployeeDetail({ profile }) {
       .select('*, employee_locations(locations(name)), employee_job_roles(job_roles(name))').eq('id', id).single()
     setEmp(e)
     const { data: a } = await supabase.from('assignments')
-      .select('*, documents(code, title, document_categories(name))')
+      .select('*, documents(code, title, document_categories(name)), completions(document_versions(version_no))')
       .eq('employee_id', id).order('due_date', { nullsFirst: false })
     setAssignments(a || [])
     const { data: l } = await supabase.from('licences').select('*, licence_types(name)').eq('employee_id', id).eq('active', true)
@@ -96,6 +96,7 @@ export default function EmployeeDetail({ profile }) {
   }
 
   if (!emp) return <p className="muted">Loading…</p>
+  const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
   for (const a of assignments) { (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
   const current = [], superseded = []
@@ -137,7 +138,7 @@ export default function EmployeeDetail({ profile }) {
             <table><tbody>
               {list.map(a => (
                 <tr key={a.id}>
-                  <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                  <td><b>{a.documents?.code}</b> {a.documents?.title}{ver(a) ? ' · v' + ver(a) : ''}</td>
                   <td className="muted">due {fmtDate(a.due_date)}</td>
                   <td><StatusBadge assignment={a} /></td>
                   <td style={{ textAlign: 'right' }}>
@@ -169,7 +170,7 @@ export default function EmployeeDetail({ profile }) {
           <table><tbody>
             {superseded.map(a => (
               <tr key={a.id}>
-                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}{ver(a) ? ' · v' + ver(a) : ''}</td>
                 <td><StatusBadge assignment={a} /></td>
                 <td style={{ textAlign: 'right' }}>{['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}</td>
               </tr>

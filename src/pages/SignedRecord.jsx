@@ -55,6 +55,7 @@ export default function SignedRecord() {
           <p className="muted">{doc?.document_categories?.name}</p>
           <table className="record-meta"><tbody>
             <tr><td>Employee</td><td>{emp ? `${emp.first_name} ${emp.last_name}` : '—'}{emp?.email ? ` · ${emp.email}` : ''}</td></tr>
+            <tr><td>Version</td><td>{version?.version_no ? 'v' + version.version_no : '—'}</td></tr>
             <tr><td>Status</td><td>{a.status}</td></tr>
             <tr><td>Completed</td><td>{fmtDate(a.completed_at)}</td></tr>
           </tbody></table>
