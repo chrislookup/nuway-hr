@@ -2,12 +2,23 @@ import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmtDate, isOverdue } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
+import LicenceForm from '../components/LicenceForm'
 
 export default function Dashboard({ profile }) {
   const [assignments, setAssignments] = useState(null)
   const [licences, setLicences] = useState([])
   const [assessQ, setAssessQ] = useState([])
+  const [licenceTypes, setLicenceTypes] = useState([])
+  const [showLic, setShowLic] = useState(false)
 
+  function loadLic() {
+    supabase.from('licences').select('*, licence_types(name)').eq('employee_id', profile.id).eq('active', true).then(({ data }) => setLicences(data || []))
+  }
+  async function viewImg(path) {
+    if (!path) return
+    const { data } = await supabase.storage.from('licences').createSignedUrl(path, 3600)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
   function loadAssess() {
     supabase.from('assignments')
       .select('*, documents(code, title, requires_assessor_signoff), profiles!assignments_employee_id_fkey(first_name, last_name)')
@@ -25,6 +36,7 @@ export default function Dashboard({ profile }) {
       .select('*, licence_types(name)')
       .eq('employee_id', profile.id).eq('active', true)
       .then(({ data }) => setLicences(data || []))
+    supabase.from('licence_types').select('*').order('name').then(({ data }) => setLicenceTypes(data || []))
     if (profile.can_assess) loadAssess()
   }, [profile.id])
 
@@ -162,26 +174,34 @@ export default function Dashboard({ profile }) {
         </div>
       )}
 
-      {licences.length > 0 && (
-        <div className="card">
+      <div className="card">
+        <div className="row between">
           <h2>My licences</h2>
+          <button className="small" onClick={() => setShowLic(v => !v)}>{showLic ? 'Close' : '+ Add licence'}</button>
+        </div>
+        {showLic && <LicenceForm employeeId={profile.id} licenceTypes={licenceTypes} onSaved={() => { setShowLic(false); loadLic() }} onCancel={() => setShowLic(false)} />}
+        {licences.length === 0 && !showLic && <p className="muted">No licences yet. Add your driver, forklift or loader licence with front &amp; back photos.</p>}
+        {licences.length > 0 && (
           <table>
-            <thead><tr><th>Licence</th><th>Number</th><th>Expiry</th></tr></thead>
+            <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th></tr></thead>
             <tbody>
               {licences.map(l => {
                 const soon = l.expiry_date && new Date(l.expiry_date) < new Date(Date.now() + 60 * 864e5)
                 return (
                   <tr key={l.id}>
                     <td>{l.licence_types?.name}</td>
+                    <td>{l.licence_class || '—'}</td>
                     <td>{l.licence_number || '—'}</td>
+                    <td className="muted">{l.conditions || '—'}</td>
                     <td>{l.expiry_date ? <span className={soon ? 'badge overdue' : ''}>{fmtDate(l.expiry_date)}</span> : '—'}</td>
+                    <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

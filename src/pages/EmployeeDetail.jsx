@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
+import LicenceForm from '../components/LicenceForm'
 
 export default function EmployeeDetail({ profile }) {
   const { id } = useParams()
@@ -17,6 +18,7 @@ export default function EmployeeDetail({ profile }) {
   const [impMsg, setImpMsg] = useState('')
   const [impBusy, setImpBusy] = useState(false)
   const [rej, setRej] = useState({ id: null, reason: '' })
+  const [showLic, setShowLic] = useState(false)
 
   async function load() {
     const { data: e } = await supabase.from('profiles')
@@ -51,6 +53,11 @@ export default function EmployeeDetail({ profile }) {
     setLic({ licence_type_id: '', licence_number: '', expiry_date: '' }); load()
   }
 
+  async function viewImg(path) {
+    if (!path) return
+    const { data } = await supabase.storage.from('licences').createSignedUrl(path, 3600)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
   async function returnDoc(a) {
     if (!rej.reason.trim()) return
     const { error } = await supabase.from('assignments').update({
@@ -180,21 +187,27 @@ export default function EmployeeDetail({ profile }) {
       )}
 
       <div className="card">
-        <h2>Licences</h2>
-        <table><tbody>
-          {licences.map(l => (
-            <tr key={l.id}><td>{l.licence_types?.name}</td><td>{l.licence_number || '—'}</td><td>{fmtDate(l.expiry_date)}</td></tr>
-          ))}
-        </tbody></table>
-        <div className="row" style={{ marginTop: 10 }}>
-          <select style={{ width: 220 }} value={lic.licence_type_id} onChange={e => setLic({ ...lic, licence_type_id: e.target.value })}>
-            <option value="">+ Add licence…</option>
-            {licTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <input style={{ width: 160 }} placeholder="Number" value={lic.licence_number} onChange={e => setLic({ ...lic, licence_number: e.target.value })} />
-          <input style={{ width: 160 }} type="date" value={lic.expiry_date} onChange={e => setLic({ ...lic, expiry_date: e.target.value })} />
-          <button className="small" onClick={addLicence} disabled={!lic.licence_type_id}>Add</button>
+        <div className="row between">
+          <h2>Licences</h2>
+          <button className="small" onClick={() => setShowLic(v => !v)}>{showLic ? 'Close' : '+ Add licence'}</button>
         </div>
+        {showLic && <LicenceForm employeeId={id} licenceTypes={licTypes} verifiedBy={profile.id} onSaved={() => { setShowLic(false); load() }} onCancel={() => setShowLic(false)} />}
+        <table>
+          <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th></tr></thead>
+          <tbody>
+            {licences.map(l => (
+              <tr key={l.id}>
+                <td>{l.licence_types?.name}</td>
+                <td>{l.licence_class || '—'}</td>
+                <td>{l.licence_number || '—'}</td>
+                <td className="muted">{l.conditions || '—'}</td>
+                <td>{fmtDate(l.expiry_date)}</td>
+                <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
+              </tr>
+            ))}
+            {licences.length === 0 && <tr><td colSpan={6} className="muted">No licences recorded.</td></tr>}
+          </tbody>
+        </table>
       </div>
 
       {['admin', 'manager'].includes(profile.tier) && (
