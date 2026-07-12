@@ -23,7 +23,11 @@ function Documents() {
   const [docs, setDocs] = useState([])
   const [cats, setCats] = useState([])
   const [edit, setEdit] = useState(null)
+  const [version, setVersion] = useState(null)
+  const [file, setFile] = useState(null)
+  const [mediaUrl, setMediaUrl] = useState('')
   const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
 
   async function load() {
     const { data } = await supabase.from('documents').select('*, document_categories(name)').order('code')
@@ -33,22 +37,63 @@ function Documents() {
   }
   useEffect(() => { load() }, [])
 
-  async function save() {
-    const d = { ...edit }
-    delete d.document_categories
-    let error
-    if (d.id) ({ error } = await supabase.from('documents').update(d).eq('id', d.id))
-    else ({ error } = await supabase.from('documents').insert(d))
-    setMsg(error ? error.message : 'Saved.')
-    if (!error) setEdit(null)
-    load()
+  async function openEdit(d) {
+    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl('')
+    if (d?.current_version_id) {
+      const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
+      setVersion(v || null); setMediaUrl(v?.media_url || '')
+    }
   }
+  function newDoc() {
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl('')
+    setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
+  }
+  async function viewMaster() {
+    if (!version?.pdf_path) return
+    const { data } = await supabase.storage.from('masters').createSignedUrl(version.pdf_path, 3600)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
+
+  async function save() {
+    setBusy(true); setMsg('')
+    const d = { ...edit }; delete d.document_categories
+    let docId = d.id, error
+    if (d.id) ({ error } = await supabase.from('documents').update(d).eq('id', d.id))
+    else {
+      const { data: ins, error: ie } = await supabase.from('documents').insert(d).select('id').single()
+      error = ie; docId = ins?.id
+    }
+    if (error) { setMsg(error.message); setBusy(false); return }
+
+    let versionId = version?.id || edit.current_version_id
+    if (!versionId && docId) {
+      const { data: nv } = await supabase.from('document_versions').insert({ document_id: docId, version_no: 1 }).select('id').single()
+      versionId = nv?.id
+      if (versionId) await supabase.from('documents').update({ current_version_id: versionId }).eq('id', docId)
+    }
+
+    let pdf_path = file ? null : (version?.pdf_path || null)
+    if (file && versionId) {
+      const safe = file.name.replace(/[^\w.\-]+/g, '_')
+      const path = `${docId}/${safe}`
+      const { error: fe } = await supabase.storage.from('masters').upload(path, file, { upsert: true })
+      if (fe) { setMsg('File upload failed: ' + fe.message); setBusy(false); return }
+      pdf_path = path
+    }
+    if (versionId && (file || mediaUrl || version)) {
+      await supabase.from('document_versions').update({ pdf_path, media_url: mediaUrl || null }).eq('id', versionId)
+    }
+
+    setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
+  }
+
+  const masterName = version?.pdf_path ? version.pdf_path.split('/').pop() : null
 
   return (
     <div className="card">
       <div className="row between">
         <h2>Documents ({docs.length})</h2>
-        <button className="small" onClick={() => setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })}>+ New document</button>
+        <button className="small" onClick={newDoc}>+ New document</button>
       </div>
       {msg && <div className="success">{msg}</div>}
       {edit && (
@@ -73,23 +118,39 @@ function Documents() {
             <div style={{ width: 150 }}><label>Refresher (months)</label>
               <input type="number" value={edit.recurrence_months || ''} onChange={e => setEdit({ ...edit, recurrence_months: e.target.value ? Number(e.target.value) : null })} /></div>
           </div>
-          <div className="checkgrid" style={{ marginTop: 10 }}>
-            <label><input type="checkbox" checked={!!edit.requires_signature} onChange={e => setEdit({ ...edit, requires_signature: e.target.checked })} />Requires e-signature</label>
+
+          <label style={{ marginTop: 10 }}>Who must e-sign</label>
+          <div className="checkgrid">
+            <label><input type="checkbox" checked={!!edit.requires_signature} onChange={e => setEdit({ ...edit, requires_signature: e.target.checked })} />Employee e-signature</label>
             <label><input type="checkbox" checked={!!edit.requires_manager_signoff} onChange={e => setEdit({ ...edit, requires_manager_signoff: e.target.checked })} />Manager sign-off</label>
+            <label><input type="checkbox" checked={!!edit.requires_admin_signoff} onChange={e => setEdit({ ...edit, requires_admin_signoff: e.target.checked })} />Admin sign-off</label>
             <label><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Active</label>
           </div>
-          <label>Conditions (JSON — e.g. {'{'}"employment_type":["casual"]{'}'} or {'{'}"locations":["Logan"]{'}'})</label>
+
+          <div className="row" style={{ marginTop: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label>Master file {masterName && <span className="muted">— current: <a onClick={viewMaster} style={{ cursor: 'pointer' }}>{masterName} ↗</a></span>}</label>
+              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={e => setFile(e.target.files?.[0] || null)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label>Media URL (video on nuway.com.au, optional)</label>
+              <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} placeholder="https://nuway.com.au/…" />
+            </div>
+          </div>
+
+          <label style={{ marginTop: 10 }}>Conditions (JSON — e.g. {'{'}"employment_type":["casual"]{'}'} or {'{'}"locations":["Logan"]{'}'})</label>
           <input value={edit.conditions ? JSON.stringify(edit.conditions) : ''} onChange={e => {
             try { setEdit({ ...edit, conditions: e.target.value ? JSON.parse(e.target.value) : null }) } catch { /* typing */ }
           }} placeholder="blank = applies to everyone" />
+
           <div className="row" style={{ marginTop: 12 }}>
-            <button onClick={save}>Save</button>
+            <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
             <button className="secondary" onClick={() => setEdit(null)}>Cancel</button>
           </div>
         </div>
       )}
       <table>
-        <thead><tr><th>Code</th><th>Title</th><th>Category</th><th>Type</th><th>Sign</th><th>Mgr</th><th /></tr></thead>
+        <thead><tr><th>Code</th><th>Title</th><th>Category</th><th>Type</th><th>Emp</th><th>Mgr</th><th>Adm</th><th /></tr></thead>
         <tbody>
           {docs.map(d => (
             <tr key={d.id} style={{ opacity: d.active ? 1 : .45 }}>
@@ -98,7 +159,8 @@ function Documents() {
               <td className="muted">{d.doc_type}</td>
               <td>{d.requires_signature ? '✓' : ''}</td>
               <td>{d.requires_manager_signoff ? '✓' : ''}</td>
-              <td><button className="secondary small" onClick={() => setEdit(d)}>Edit</button></td>
+              <td>{d.requires_admin_signoff ? '✓' : ''}</td>
+              <td><button className="secondary small" onClick={() => openEdit(d)}>Edit</button></td>
             </tr>
           ))}
         </tbody>
