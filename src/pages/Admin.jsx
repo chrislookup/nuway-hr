@@ -64,7 +64,6 @@ function Documents() {
   async function save() {
     setBusy(true); setMsg('')
     const d = { ...edit }; delete d.document_categories
-    if (d.doc_type === 'web_form') d.requires_assessor_signoff = pages.some(p => p.assessor) || !!d.requires_assessor_signoff
     let docId = d.id, error
     if (d.id) ({ error } = await supabase.from('documents').update(d).eq('id', d.id))
     else {

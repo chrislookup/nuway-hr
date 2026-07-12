@@ -14,6 +14,8 @@ export default function CompleteDoc({ profile }) {
   const [answers, setAnswers] = useState({})
   const [sig, setSig] = useState(null)
   const [signedName, setSignedName] = useState('')
+  const [compName, setCompName] = useState('')
+  const [compSig, setCompSig] = useState(null)
   const [agree, setAgree] = useState(false)
   const [file, setFile] = useState(null)
   const [err, setErr] = useState('')
@@ -57,6 +59,7 @@ export default function CompleteDoc({ profile }) {
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
     if (needsSig && !guided && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    if (hasAssessor && (!compSig || !compName.trim())) { setErr('The competent person must add their name and signature for the supervised section.'); return }
     if (isUpload && !file) { setErr('Please choose a file to upload.'); return }
     if (test) {
       const qs = test.questions || []
@@ -70,6 +73,13 @@ export default function CompleteDoc({ profile }) {
         signature_path = `${a.employee_id}/${a.id}-signature.png`
         const { error: se } = await supabase.storage.from('signatures').upload(signature_path, blob, { upsert: true })
         if (se) throw se
+      }
+      let verifier_signature_path = null
+      if (hasAssessor && compSig) {
+        const cblob = await (await fetch(compSig)).blob()
+        verifier_signature_path = `${a.employee_id}/${a.id}-assessor.png`
+        const { error: ve } = await supabase.storage.from('signatures').upload(verifier_signature_path, cblob, { upsert: true })
+        if (ve) throw ve
       }
       let uploadedPath = null
       if (file) {
@@ -91,6 +101,8 @@ export default function CompleteDoc({ profile }) {
         form_data: { ...values, uploaded_file: uploadedPath },
         signature_path, signed_name: signedName || null,
         signed_at: needsSig ? new Date().toISOString() : null,
+        verifier_name: hasAssessor ? compName.trim() : null, verifier_signature_path,
+        verified_at: hasAssessor ? new Date().toISOString() : null,
         user_agent: navigator.userAgent,
       }).select().single()
       if (ce) throw ce
@@ -103,7 +115,7 @@ export default function CompleteDoc({ profile }) {
       }
       let status = 'completed'
       if (test && !passed) status = 'awaiting_review'
-      else if (doc.requires_manager_signoff || doc.requires_assessor_signoff || doc.requires_admin_signoff || hasAssessor) status = 'awaiting_review'
+      else if (doc.requires_manager_signoff || doc.requires_admin_signoff || (doc.requires_assessor_signoff && !hasAssessor)) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
         upd.completed_at = new Date().toISOString()
@@ -165,6 +177,16 @@ export default function CompleteDoc({ profile }) {
 
       {mine && !['completed'].includes(a.status) && (
         <div className="card">
+          {hasAssessor && (
+            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #e0e6e0' }}>
+              <h2>Competent person / supervisor sign-off</h2>
+              <p className="muted">The competent person confirms the supervised section(s) were completed together with the employee.</p>
+              <label>Competent person — full name</label>
+              <input value={compName} onChange={e => setCompName(e.target.value)} placeholder="Competent person's name" />
+              <label>Competent person — signature</label>
+              <SignaturePad onChange={setCompSig} />
+            </div>
+          )}
           {needsSig && (<>
             <h2>Sign &amp; acknowledge</h2>
             {!guided && (

@@ -8,14 +8,13 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
     return (
       <div className="guided">
         {schema.pages.map((pg, pi) => {
-          const locked = pg.assessor && !assessorMode
+          const locked = false
           return (
           <section key={pi} className="card" style={{ marginTop: pi ? 14 : 0, borderLeft: pg.assessor ? '4px solid var(--green)' : undefined }}>
             {pg.title && <h2>{pg.title}</h2>}
             {pg.assessor && (
-              <div className={locked ? 'note-assessor' : 'success'} style={{ marginBottom: 8 }}>
-                {locked ? 'A competent person / supervisor will complete and sign this section with you.' : 'Competent-person section — complete and sign to confirm.'}
-                {pg.assessorNote ? ` (${pg.assessorNote})` : ''}
+              <div className="note-assessor" style={{ marginBottom: 8 }}>
+                Complete this section together with a competent person / supervisor, who signs it off at the end.{pg.assessorNote ? ` (${pg.assessorNote})` : ''}
               </div>
             )}
             {(pg.blocks || []).map((b, bi) => {
@@ -112,7 +111,6 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
 export function validateGuided(schema, values, assessorMode = false) {
   if (!schema?.pages) return null
   for (const pg of schema.pages) {
-    if (pg.assessor && !assessorMode) continue
     for (const b of (pg.blocks || [])) {
       if (b.type === 'field' && b.required && b.input === 'checkbox' && !values[b.name])
         return `Please tick: ${b.label}`

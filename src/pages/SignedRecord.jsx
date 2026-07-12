@@ -59,7 +59,7 @@ export default function SignedRecord() {
         </div>
 
         {pages && pages.map((pg, pi) => {
-          const pfd = pg.assessor ? (comp?.verifier_data || {}) : fd
+          const pfd = fd
           return (
           <section key={pi} style={{ marginTop: 16 }}>
             {pg.title && <h2>{pg.title}</h2>}
