@@ -53,7 +53,7 @@ function Documents() {
   }
   function newDoc() {
     setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null)
-    setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
+    setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
     if (!version?.pdf_path) return
@@ -64,6 +64,7 @@ function Documents() {
   async function save() {
     setBusy(true); setMsg('')
     const d = { ...edit }; delete d.document_categories
+    if (d.doc_type === 'web_form') d.requires_assessor_signoff = pages.some(p => p.assessor) || !!d.requires_assessor_signoff
     let docId = d.id, error
     if (d.id) ({ error } = await supabase.from('documents').update(d).eq('id', d.id))
     else {
@@ -144,6 +145,7 @@ function Documents() {
             <label><input type="checkbox" checked={!!edit.requires_signature} onChange={e => setEdit({ ...edit, requires_signature: e.target.checked })} />Employee e-signature</label>
             <label><input type="checkbox" checked={!!edit.requires_manager_signoff} onChange={e => setEdit({ ...edit, requires_manager_signoff: e.target.checked })} />Manager sign-off</label>
             <label><input type="checkbox" checked={!!edit.requires_admin_signoff} onChange={e => setEdit({ ...edit, requires_admin_signoff: e.target.checked })} />Admin sign-off</label>
+            <label><input type="checkbox" checked={!!edit.requires_assessor_signoff} onChange={e => setEdit({ ...edit, requires_assessor_signoff: e.target.checked })} />Competent-person sign-off</label>
             <label><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Active</label>
           </div>
 

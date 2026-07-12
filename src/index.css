@@ -105,3 +105,5 @@ video { width: 100%; border-radius: 8px; }
 .listgrouped .col-due { width: 150px; white-space: nowrap; }
 .listgrouped .col-status { width: 120px; }
 .listgrouped .col-act { width: 110px; text-align: right; white-space: nowrap; }
+
+.note-assessor { background: #eef6f0; border: 1px solid #cfe6d6; border-radius: 8px; padding: 8px 10px; color: #2b5c3b; font-size: 13px; }

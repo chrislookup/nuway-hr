@@ -1,16 +1,27 @@
 // Renders either a "guided" schema (pages of clauses + fields + acknowledgements)
 // or the legacy simple { fields:[...] } schema. Editable — writes into `values`.
-export default function FormRenderer({ schema, values, onChange }) {
+export default function FormRenderer({ schema, values, onChange, assessorMode = false }) {
   function set(name, v) { onChange({ ...values, [name]: v }) }
 
   // ---- guided schema (pages/blocks) ----
   if (schema?.pages) {
     return (
       <div className="guided">
-        {schema.pages.map((pg, pi) => (
-          <section key={pi} className="card" style={{ marginTop: pi ? 14 : 0 }}>
+        {schema.pages.map((pg, pi) => {
+          const locked = pg.assessor && !assessorMode
+          return (
+          <section key={pi} className="card" style={{ marginTop: pi ? 14 : 0, borderLeft: pg.assessor ? '4px solid var(--green)' : undefined }}>
             {pg.title && <h2>{pg.title}</h2>}
+            {pg.assessor && (
+              <div className={locked ? 'note-assessor' : 'success'} style={{ marginBottom: 8 }}>
+                {locked ? 'A competent person / supervisor will complete and sign this section with you.' : 'Competent-person section — complete and sign to confirm.'}
+                {pg.assessorNote ? ` (${pg.assessorNote})` : ''}
+              </div>
+            )}
             {(pg.blocks || []).map((b, bi) => {
+              if (locked && (b.type === 'field' || b.type === 'ack')) {
+                return <p key={bi} className="muted" style={{ fontSize: 13 }}>• {b.label || b.text} — to be completed by a competent person</p>
+              }
               if (b.type === 'heading') return <h3 key={bi} style={{ marginTop: 14 }}>{b.text}</h3>
               if (b.type === 'clause') return <p key={bi} className="clause">{b.text}</p>
               if (b.type === 'note') return <p key={bi} className="muted" style={{ fontSize: 13 }}>{b.text}</p>
@@ -53,7 +64,8 @@ export default function FormRenderer({ schema, values, onChange }) {
               return null
             })}
           </section>
-        ))}
+          )
+        })}
       </div>
     )
   }
@@ -89,9 +101,10 @@ export default function FormRenderer({ schema, values, onChange }) {
 }
 
 // Validation helper shared with CompleteDoc
-export function validateGuided(schema, values) {
+export function validateGuided(schema, values, assessorMode = false) {
   if (!schema?.pages) return null
   for (const pg of schema.pages) {
+    if (pg.assessor && !assessorMode) continue
     for (const b of (pg.blocks || [])) {
       if (b.type === 'field' && b.required && !String(values[b.name] ?? b.default ?? '').trim())
         return `Please complete: ${b.label}`
