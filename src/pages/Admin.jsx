@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
-import { supabase, CAPABILITIES } from '../lib/supabase'
+import { supabase, CAPABILITIES, fmtDate } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
 
@@ -14,7 +14,7 @@ export default function Admin({ profile }) {
       <div className="pill-tabs">
         {TABS.map(t => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}
       </div>
-      {tab === 'Documents' && <Documents />}
+      {tab === 'Documents' && <Documents profile={profile} />}
       {tab === 'Packs' && <Packs />}
       {tab === 'People' && <People profile={profile} />}
       {tab === 'Organisation' && <Organisation />}
@@ -22,7 +22,7 @@ export default function Admin({ profile }) {
   )
 }
 
-function Documents() {
+function Documents({ profile }) {
   const [docs, setDocs] = useState([])
   const [cats, setCats] = useState([])
   const [edit, setEdit] = useState(null)
@@ -31,6 +31,10 @@ function Documents() {
   const [mediaUrl, setMediaUrl] = useState('')
   const [pages, setPages] = useState([])
   const [test, setTest] = useState(null)
+  const [versions, setVersions] = useState([])
+  const [saveAsk, setSaveAsk] = useState(false)
+  const [changeNote, setChangeNote] = useState('')
+  const [reassign, setReassign] = useState(false)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -43,16 +47,18 @@ function Documents() {
   useEffect(() => { load() }, [])
 
   async function openEdit(d) {
-    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null)
+    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setSaveAsk(false); setChangeNote(''); setReassign(false)
     if (d?.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
       setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || [])
       const { data: tst } = await supabase.from('tests').select('*').eq('document_version_id', d.current_version_id).maybeSingle()
       setTest(tst || null)
-    }
+      const { data: vs } = await supabase.from('document_versions').select('*').eq('document_id', d.id).order('version_no', { ascending: false })
+      setVersions(vs || [])
+    } else { setVersions([]) }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null)
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false)
     setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -61,7 +67,7 @@ function Documents() {
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
 
-  async function save() {
+  async function saveInPlace() {
     setBusy(true); setMsg('')
     const d = { ...edit }; delete d.document_categories
     let docId = d.id, error
@@ -104,7 +110,39 @@ function Documents() {
       }
     }
 
-    setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
+    setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setSaveAsk(false); setBusy(false); load()
+  }
+
+  async function publishNewVersion() {
+    setBusy(true); setMsg('')
+    try {
+      const d = { ...edit }; delete d.document_categories
+      const { error: ue } = await supabase.from('documents').update(d).eq('id', edit.id)
+      if (ue) throw ue
+      const safe = file ? file.name.replace(/[^\w.\-]+/g, '_') : null
+      const newNo = (version?.version_no || 1) + 1
+      let pdf_path = file ? `${edit.id}/v${newNo}-${safe}` : (version?.pdf_path || null)
+      const { data: nv, error: ie } = await supabase.from('document_versions').insert({
+        document_id: edit.id, version_no: newNo,
+        form_schema: edit.doc_type === 'web_form' ? (pages.length ? { type: 'guided', pages } : null) : (version?.form_schema || null),
+        pdf_path, media_url: mediaUrl || null, notes: changeNote || null, created_by: profile.id,
+      }).select('*').single()
+      if (ie) throw ie
+      if (file) { const { error: fe } = await supabase.storage.from('masters').upload(pdf_path, file, { upsert: true }); if (fe) throw fe }
+      const cleanQs = (test?.questions || []).filter(q => q.q && (q.options || []).length >= 2 && q.answer)
+      if (cleanQs.length) await supabase.from('tests').insert({ document_version_id: nv.id, pass_mark: Number(test.pass_mark) || 80, questions: cleanQs, shuffle: test.shuffle ?? true })
+      await supabase.from('documents').update({ current_version_id: nv.id }).eq('id', edit.id)
+      let reassigned = 0
+      if (reassign) {
+        const { data: rows } = await supabase.from('assignments').select('employee_id, profiles!assignments_employee_id_fkey(status)').eq('document_id', edit.id)
+        const ids = [...new Set((rows || []).filter(r => r.profiles?.status === 'active').map(r => r.employee_id))]
+        const due = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+        if (ids.length) await supabase.from('assignments').insert(ids.map(id => ({ employee_id: id, document_id: edit.id, source: 'manual', assigned_by: profile.id, due_date: due })))
+        reassigned = ids.length
+      }
+      setMsg(`Published v${newNo}. ${reassign ? `Re-assigned to ${reassigned} staff to re-complete.` : 'Existing completions kept against their version.'}`)
+      setSaveAsk(false); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
+    } catch (e) { setMsg(e.message || String(e)); setBusy(false) }
   }
 
   const masterName = version?.pdf_path ? version.pdf_path.split('/').pop() : null
@@ -176,10 +214,47 @@ function Documents() {
             try { setEdit({ ...edit, conditions: e.target.value ? JSON.parse(e.target.value) : null }) } catch { /* typing */ }
           }} placeholder="blank = applies to everyone" />
 
-          <div className="row" style={{ marginTop: 12 }}>
-            <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-            <button className="secondary" onClick={() => setEdit(null)}>Cancel</button>
-          </div>
+          {edit.id && versions.length > 0 && (
+            <div className="fb-section" style={{ marginTop: 14 }}>
+              <label style={{ margin: 0 }}>Version history</label>
+              <table><tbody>
+                {versions.map(v => (
+                  <tr key={v.id}>
+                    <td><b>v{v.version_no}</b></td>
+                    <td><span className={`badge ${v.id === edit.current_version_id ? 'completed' : 'expired'}`}>{v.id === edit.current_version_id ? 'current' : 'archived'}</span></td>
+                    <td className="muted">{v.notes || '—'}</td>
+                    <td className="muted">{v.created_at ? fmtDate(v.created_at) : ''}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </div>
+          )}
+
+          {saveAsk ? (
+            <div className="fb-section" style={{ marginTop: 12 }}>
+              <b>Save changes to “{edit.code} {edit.title}”</b>
+              <p className="muted" style={{ fontSize: 13 }}>Have you changed the content in a way staff need to re-acknowledge?</p>
+              <button className="secondary" style={{ marginTop: 4 }} onClick={() => { setSaveAsk(false); saveInPlace() }} disabled={busy}>Minor edit — just update (no re-sign)</button>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #e0e6e0' }}>
+                <label>Publish as a new version — what changed?</label>
+                <input value={changeNote} onChange={e => setChangeNote(e.target.value)} placeholder="e.g. Updated section 3 obligations" />
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, marginTop: 8 }}>
+                  <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={reassign} onChange={e => setReassign(e.target.checked)} />
+                  <span>Require staff who already completed this to re-complete the new version (pushes it to their to-do)</span>
+                </label>
+                <div className="row" style={{ marginTop: 10 }}>
+                  <button onClick={publishNewVersion} disabled={busy}>{busy ? 'Publishing…' : 'Publish new version'}</button>
+                  <button className="secondary" onClick={() => setSaveAsk(false)}>Back</button>
+                </div>
+                <p className="muted" style={{ fontSize: 12 }}>The current version is archived (kept &amp; retrievable). Existing signed records stay bound to the version each person actually signed.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="row" style={{ marginTop: 12 }}>
+              <button onClick={() => (edit.id ? setSaveAsk(true) : saveInPlace())} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+              <button className="secondary" onClick={() => setEdit(null)}>Cancel</button>
+            </div>
+          )}
         </div>
       )}
       <table>
