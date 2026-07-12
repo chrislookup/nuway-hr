@@ -122,6 +122,7 @@ export default function EmployeeDetail({ profile }) {
                   <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
                   <td className="muted">due {fmtDate(a.due_date)}</td>
                   <td><StatusBadge assignment={a} /></td>
+                  <td style={{ textAlign: 'right' }}>{a.status === 'completed' && <Link to={`/record/${a.id}`}>View / print</Link>}</td>
                 </tr>
               ))}
             </tbody></table>

@@ -8,6 +8,7 @@ import CompleteDoc from './pages/CompleteDoc'
 import Team from './pages/Team'
 import EmployeeDetail from './pages/EmployeeDetail'
 import NewHire from './pages/NewHire'
+import SignedRecord from './pages/SignedRecord'
 import Admin from './pages/Admin'
 
 export default function App() {
@@ -61,6 +62,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />
             <Route path="/doc/:assignmentId" element={<CompleteDoc profile={profile} />} />
+            <Route path="/record/:assignmentId" element={<SignedRecord />} />
             {isMgr && <Route path="/team" element={<Team profile={profile} />} />}
             {isMgr && <Route path="/employee/:id" element={<EmployeeDetail profile={profile} />} />}
             {isMgr && <Route path="/new-hire" element={<NewHire profile={profile} />} />}

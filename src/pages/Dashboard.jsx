@@ -80,6 +80,21 @@ export default function Dashboard({ profile }) {
         </table>
       </div>
 
+      {done > 0 && (
+        <div className="card">
+          <h2>My completed records</h2>
+          <table><tbody>
+            {assignments.filter(a => a.status === 'completed').map(a => (
+              <tr key={a.id}>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td className="muted">{fmtDate(a.completed_at)}</td>
+                <td style={{ textAlign: 'right' }}><Link to={`/record/${a.id}`}>View / print</Link></td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
+
       {licences.length > 0 && (
         <div className="card">
           <h2>My licences</h2>

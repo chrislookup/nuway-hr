@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
 import SignaturePad from '../components/SignaturePad'
-import FormRenderer from '../components/FormRenderer'
+import FormRenderer, { validateGuided } from '../components/FormRenderer'
 
 export default function CompleteDoc({ profile }) {
   const { assignmentId } = useParams()
@@ -50,10 +50,12 @@ export default function CompleteDoc({ profile }) {
   const needsSig = doc.requires_signature
   const mine = a.employee_id === profile.id
 
+  const guided = !!version?.form_schema?.pages
   async function submit() {
     setErr('')
+    if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
-    if (needsSig && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    if (needsSig && !guided && !agree) { setErr('Please tick the acknowledgement box.'); return }
     if (isUpload && !file) { setErr('Please choose a file to upload.'); return }
     if (test) {
       const qs = test.questions || []
@@ -158,10 +160,12 @@ export default function CompleteDoc({ profile }) {
         <div className="card">
           {needsSig && (<>
             <h2>Sign &amp; acknowledge</h2>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400 }}>
-              <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={agree} onChange={e => setAgree(e.target.checked)} />
-              I confirm I have read and understood this document, and my electronic signature below is my agreement to comply with it.
-            </label>
+            {!guided && (
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400 }}>
+                <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={agree} onChange={e => setAgree(e.target.checked)} />
+                I confirm I have read and understood this document, and my electronic signature below is my agreement to comply with it.
+              </label>
+            )}
             <label>Full name</label>
             <input value={signedName} onChange={e => setSignedName(e.target.value)} placeholder="Type your full legal name" />
             <label>Signature</label>
