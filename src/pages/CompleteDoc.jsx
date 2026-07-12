@@ -72,7 +72,7 @@ export default function CompleteDoc({ profile }) {
       }
       let uploadedPath = null
       if (file) {
-        uploadedPath = `${a.employee_id}/${a.id}-${file.name}`
+        uploadedPath = `${a.employee_id}/${a.id}-${file.name.replace(/[^\w.\-]+/g, '_')}`
         const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, file, { upsert: true })
         if (fe) throw fe
       }

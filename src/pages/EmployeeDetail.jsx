@@ -149,10 +149,10 @@ export default function EmployeeDetail({ profile }) {
         </div>
       </div>
 
-      {profile.tier === 'admin' && (
+      {['admin', 'manager'].includes(profile.tier) && (
         <div className="card">
-          <h2>Import existing signed record</h2>
-          <p className="muted">Upload a completed, already-signed document (e.g. from your Dropbox files). It attaches to this employee and marks the requirement complete.</p>
+          <h2>Upload a document on this employee’s behalf</h2>
+          <p className="muted">Upload a document on behalf of this employee — e.g. a completed/signed form from your files, a CV, or a licence. It attaches to this employee and marks the requirement complete.</p>
           {impMsg && <div className={impMsg.startsWith('Failed') ? 'error' : 'success'}>{impMsg}</div>}
           <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
             <select style={{ width: 320 }} value={imp.document_id} onChange={e => setImp({ ...imp, document_id: e.target.value })}>
@@ -160,7 +160,7 @@ export default function EmployeeDetail({ profile }) {
               {docs.map(d => <option key={d.id} value={d.id}>{d.code} {d.title}</option>)}
             </select>
             <input type="date" value={imp.signed_at} onChange={e => setImp({ ...imp, signed_at: e.target.value })} title="Date originally signed (optional)" />
-            <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setImp({ ...imp, file: e.target.files?.[0] || null })} />
+            <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={e => setImp({ ...imp, file: e.target.files?.[0] || null })} />
             <button className="small" onClick={importRecord} disabled={impBusy || !imp.document_id || !imp.file}>{impBusy ? 'Importing…' : 'Import & mark complete'}</button>
           </div>
         </div>
