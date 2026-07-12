@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
+import QuestionBuilder from '../components/QuestionBuilder'
 import { supabase, CAPABILITIES } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
@@ -29,6 +30,7 @@ function Documents() {
   const [file, setFile] = useState(null)
   const [mediaUrl, setMediaUrl] = useState('')
   const [pages, setPages] = useState([])
+  const [test, setTest] = useState(null)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -41,14 +43,16 @@ function Documents() {
   useEffect(() => { load() }, [])
 
   async function openEdit(d) {
-    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([])
+    setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null)
     if (d?.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
       setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || [])
+      const { data: tst } = await supabase.from('tests').select('*').eq('document_version_id', d.current_version_id).maybeSingle()
+      setTest(tst || null)
     }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([])
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null)
     setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -87,6 +91,17 @@ function Documents() {
       const vpatch = { pdf_path, media_url: mediaUrl || null }
       if (edit.doc_type === 'web_form') vpatch.form_schema = pages.length ? { type: 'guided', pages } : null
       await supabase.from('document_versions').update(vpatch).eq('id', versionId)
+    }
+    // understanding questions (tests)
+    if (versionId) {
+      const cleanQs = (test?.questions || []).filter(q => q.q && (q.options || []).length >= 2 && q.answer)
+      if (cleanQs.length) {
+        const payload = { pass_mark: Number(test.pass_mark) || 80, questions: cleanQs, shuffle: test.shuffle ?? true }
+        if (test.id) await supabase.from('tests').update(payload).eq('id', test.id)
+        else await supabase.from('tests').insert({ ...payload, document_version_id: versionId })
+      } else if (test?.id) {
+        await supabase.from('tests').delete().eq('id', test.id)
+      }
     }
 
     setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
@@ -149,6 +164,11 @@ function Documents() {
               <FormBuilder pages={pages} onChange={setPages} />
             </div>
           )}
+
+          <div style={{ marginTop: 14 }}>
+            <label>Understanding questions (optional — checks the employee understood before it counts as complete)</label>
+            <QuestionBuilder test={test} onChange={setTest} />
+          </div>
 
           <label style={{ marginTop: 10 }}>Conditions (JSON — e.g. {'{'}"employment_type":["casual"]{'}'} or {'{'}"locations":["Logan"]{'}'})</label>
           <input value={edit.conditions ? JSON.stringify(edit.conditions) : ''} onChange={e => {
