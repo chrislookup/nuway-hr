@@ -11,6 +11,7 @@ export default function SignedRecord() {
   const [version, setVersion] = useState(null)
   const [sigUrl, setSigUrl] = useState(null)
   const [verifierSigUrl, setVerifierSigUrl] = useState(null)
+  const [cpSigs, setCpSigs] = useState({})
   const [fileUrl, setFileUrl] = useState(null)
   const [notfound, setNotfound] = useState(false)
 
@@ -29,6 +30,7 @@ export default function SignedRecord() {
       if (vid) { const { data: v } = await supabase.from('document_versions').select('*').eq('id', vid).single(); setVersion(v) }
       if (c?.signature_path) { const { data: s } = await supabase.storage.from('signatures').createSignedUrl(c.signature_path, 3600); setSigUrl(s?.signedUrl || null) }
       if (c?.verifier_signature_path) { const { data: vs } = await supabase.storage.from('signatures').createSignedUrl(c.verifier_signature_path, 3600); setVerifierSigUrl(vs?.signedUrl || null) }
+      if (c?.verifier_data) { const map = {}; for (const [k, v] of Object.entries(c.verifier_data)) { if (v?.sig) { const { data: u } = await supabase.storage.from('signatures').createSignedUrl(v.sig, 3600); map[k] = u?.signedUrl || null } } setCpSigs(map) }
       const up = c?.completed_pdf_path || c?.form_data?.uploaded_file
       if (up) { const { data: f } = await supabase.storage.from('completed-docs').createSignedUrl(up, 3600); setFileUrl(f?.signedUrl || null) }
     })()
@@ -77,6 +79,16 @@ export default function SignedRecord() {
               )
               return null
             })}
+            {pg.assessor && (comp?.verifier_data?.[String(pi)] || comp?.verifier_name) && (
+              <div className="cp-signoff" style={{ marginTop: 10 }}>
+                <b>Competent-person sign-off — this section</b>
+                <table className="record-meta"><tbody>
+                  <tr><td>Verified by</td><td>{comp?.verifier_data?.[String(pi)]?.name || comp?.verifier_name || '—'}</td></tr>
+                  <tr><td>Signed at</td><td>{comp?.verified_at ? new Date(comp.verified_at).toLocaleString('en-AU') : '—'}</td></tr>
+                </tbody></table>
+                {(cpSigs[String(pi)] || verifierSigUrl) && <img src={cpSigs[String(pi)] || verifierSigUrl} alt="competent person signature" className="sig-img" />}
+              </div>
+            )}
           </section>
           )
         })}
@@ -106,7 +118,7 @@ export default function SignedRecord() {
           </p>
         </div>
 
-        {(comp?.verifier_name || verifierSigUrl) && (
+        {!comp?.verifier_data && (comp?.verifier_name || verifierSigUrl) && (
           <div className="record-sign">
             <h3>Competent-person verification</h3>
             {verifierSigUrl && <img src={verifierSigUrl} alt="competent person signature" className="sig-img" />}

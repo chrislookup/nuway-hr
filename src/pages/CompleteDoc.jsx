@@ -14,8 +14,6 @@ export default function CompleteDoc({ profile }) {
   const [answers, setAnswers] = useState({})
   const [sig, setSig] = useState(null)
   const [signedName, setSignedName] = useState('')
-  const [compName, setCompName] = useState('')
-  const [compSig, setCompSig] = useState(null)
   const [agree, setAgree] = useState(false)
   const [file, setFile] = useState(null)
   const [err, setErr] = useState('')
@@ -53,13 +51,14 @@ export default function CompleteDoc({ profile }) {
   const mine = a.employee_id === profile.id
 
   const guided = !!version?.form_schema?.pages
-  const hasAssessor = !!version?.form_schema?.pages?.some(p => p.assessor)
+  const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
+  const hasAssessor = assessorIdx.length > 0
   async function submit() {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
     if (needsSig && !guided && !agree) { setErr('Please tick the acknowledgement box.'); return }
-    if (hasAssessor && (!compSig || !compName.trim())) { setErr('The competent person must add their name and signature for the supervised section.'); return }
+    for (const pi of assessorIdx) { if (!values[`cp_${pi}_sig`] || !String(values[`cp_${pi}_name`] || '').trim()) { setErr('Each competent-person section needs the competent person’s name and signature.'); return } }
     if (isUpload && !file) { setErr('Please choose a file to upload.'); return }
     if (test) {
       const qs = test.questions || []
@@ -74,13 +73,17 @@ export default function CompleteDoc({ profile }) {
         const { error: se } = await supabase.storage.from('signatures').upload(signature_path, blob, { upsert: true })
         if (se) throw se
       }
-      let verifier_signature_path = null
-      if (hasAssessor && compSig) {
-        const cblob = await (await fetch(compSig)).blob()
-        verifier_signature_path = `${a.employee_id}/${a.id}-assessor.png`
-        const { error: ve } = await supabase.storage.from('signatures').upload(verifier_signature_path, cblob, { upsert: true })
+      const verifier_data = {}
+      let firstName = null, firstPath = null
+      for (const pi of assessorIdx) {
+        const cblob = await (await fetch(values[`cp_${pi}_sig`])).blob()
+        const cpath = `${a.employee_id}/${a.id}-cp-${pi}.png`
+        const { error: ve } = await supabase.storage.from('signatures').upload(cpath, cblob, { upsert: true })
         if (ve) throw ve
+        verifier_data[String(pi)] = { name: String(values[`cp_${pi}_name`]).trim(), sig: cpath }
+        if (!firstName) { firstName = verifier_data[String(pi)].name; firstPath = cpath }
       }
+      const cleanValues = Object.fromEntries(Object.entries(values).filter(([k]) => !k.startsWith('cp_')))
       let uploadedPath = null
       if (file) {
         uploadedPath = `${a.employee_id}/${a.id}-${file.name.replace(/[^\w.\-]+/g, '_')}`
@@ -98,11 +101,12 @@ export default function CompleteDoc({ profile }) {
       const { data: comp, error: ce } = await supabase.from('completions').insert({
         assignment_id: a.id,
         document_version_id: version?.id,
-        form_data: { ...values, uploaded_file: uploadedPath },
+        form_data: { ...cleanValues, uploaded_file: uploadedPath },
         signature_path, signed_name: signedName || null,
         signed_at: needsSig ? new Date().toISOString() : null,
-        verifier_name: hasAssessor ? compName.trim() : null, verifier_signature_path,
-        verified_at: hasAssessor ? new Date().toISOString() : null,
+        verifier_name: firstName, verifier_signature_path: firstPath,
+        verifier_data: assessorIdx.length ? verifier_data : null,
+        verified_at: assessorIdx.length ? new Date().toISOString() : null,
         user_agent: navigator.userAgent,
       }).select().single()
       if (ce) throw ce
@@ -177,16 +181,6 @@ export default function CompleteDoc({ profile }) {
 
       {mine && !['completed'].includes(a.status) && (
         <div className="card">
-          {hasAssessor && (
-            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #e0e6e0' }}>
-              <h2>Competent person / supervisor sign-off</h2>
-              <p className="muted">The competent person confirms the supervised section(s) were completed together with the employee.</p>
-              <label>Competent person — full name</label>
-              <input value={compName} onChange={e => setCompName(e.target.value)} placeholder="Competent person's name" />
-              <label>Competent person — signature</label>
-              <SignaturePad onChange={setCompSig} />
-            </div>
-          )}
           {needsSig && (<>
             <h2>Sign &amp; acknowledge</h2>
             {!guided && (

@@ -1,3 +1,4 @@
+import SignaturePad from './SignaturePad'
 // Renders either a "guided" schema (pages of clauses + fields + acknowledgements)
 // or the legacy simple { fields:[...] } schema. Editable — writes into `values`.
 export default function FormRenderer({ schema, values, onChange, assessorMode = false }) {
@@ -70,6 +71,15 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
               }
               return null
             })}
+            {pg.assessor && (
+              <div className="cp-signoff">
+                <p style={{ fontWeight: 600, margin: '0 0 4px' }}>Competent person / supervisor sign-off — this section only</p>
+                <label>Competent person — full name</label>
+                <input value={values[`cp_${pi}_name`] || ''} onChange={e => set(`cp_${pi}_name`, e.target.value)} placeholder="Competent person's name" />
+                <label>Signature</label>
+                <SignaturePad onChange={d => set(`cp_${pi}_sig`, d)} />
+              </div>
+            )}
           </section>
           )
         })}
