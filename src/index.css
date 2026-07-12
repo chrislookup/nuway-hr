@@ -96,3 +96,5 @@ video { width: 100%; border-radius: 8px; }
 .fb-section { border: 1px solid #e0e6e0; border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: #fafcfa; }
 .fb-block { border: 1px solid #e6ebe6; border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fff; }
 .formbuilder label { font-size: 13px; }
+
+.navbadge { display: inline-block; min-width: 18px; text-align: center; margin-left: 8px; padding: 1px 6px; border-radius: 10px; background: #b42318; color: #fff; font-size: 11px; font-weight: 700; vertical-align: middle; }

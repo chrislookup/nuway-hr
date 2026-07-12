@@ -16,6 +16,7 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [recovery, setRecovery] = useState(false)
   const [reload, setReload] = useState(0)
+  const [reviewCount, setReviewCount] = useState(0)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -32,6 +33,14 @@ export default function App() {
     supabase.from('profiles').select('*').eq('id', session.user.id).single()
       .then(({ data }) => setProfile(data))
   }, [session, reload])
+
+  useEffect(() => {
+    if (!profile) { setReviewCount(0); return }
+    const isM = profile.tier === 'manager' || profile.tier === 'admin'
+    if (!isM) { setReviewCount(0); return }
+    supabase.from('assignments').select('id', { count: 'exact', head: true }).eq('status', 'awaiting_review')
+      .then(({ count }) => setReviewCount(count || 0))
+  }, [profile])
 
   if (session === undefined) return null
   if (!session) return <Login />
@@ -63,7 +72,7 @@ export default function App() {
           <div className="brand">NU<span>WAY</span> HR</div>
           <nav>
             <NavLink to="/" end>My Dashboard</NavLink>
-            {isMgr && <NavLink to="/team">Team</NavLink>}
+            {isMgr && <NavLink to="/team">Team{reviewCount > 0 && <span className="navbadge">{reviewCount}</span>}</NavLink>}
             {isMgr && <NavLink to="/new-hire">New Hire</NavLink>}
             {tier === 'admin' && <NavLink to="/admin">Admin</NavLink>}
           </nav>
