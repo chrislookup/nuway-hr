@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
-import { supabase, CAPABILITIES } from '../lib/supabase'
+import { supabase, CAPABILITIES, fmtDate } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
 
@@ -14,7 +14,7 @@ export default function Admin({ profile }) {
       <div className="pill-tabs">
         {TABS.map(t => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}
       </div>
-      {tab === 'Documents' && <Documents />}
+      {tab === 'Documents' && <Documents profile={profile} />}
       {tab === 'Packs' && <Packs />}
       {tab === 'People' && <People profile={profile} />}
       {tab === 'Organisation' && <Organisation />}
@@ -22,7 +22,7 @@ export default function Admin({ profile }) {
   )
 }
 
-function Documents() {
+function Documents({ profile }) {
   const [docs, setDocs] = useState([])
   const [cats, setCats] = useState([])
   const [edit, setEdit] = useState(null)
@@ -31,6 +31,8 @@ function Documents() {
   const [mediaUrl, setMediaUrl] = useState('')
   const [pages, setPages] = useState([])
   const [test, setTest] = useState(null)
+  const [versions, setVersions] = useState([])
+  const [pub, setPub] = useState(null)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -49,10 +51,12 @@ function Documents() {
       setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || [])
       const { data: tst } = await supabase.from('tests').select('*').eq('document_version_id', d.current_version_id).maybeSingle()
       setTest(tst || null)
-    }
+      const { data: vs } = await supabase.from('document_versions').select('*').eq('document_id', d.id).order('version_no', { ascending: false })
+      setVersions(vs || [])
+    } else { setVersions([]) }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null)
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setPub(null)
     setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -106,6 +110,44 @@ function Documents() {
     }
 
     setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
+  }
+
+  async function publishNewVersion() {
+    if (!edit.id || !version) return
+    setBusy(true); setMsg('')
+    try {
+      const { data: nv, error: ie } = await supabase.from('document_versions').insert({
+        document_id: edit.id, version_no: (version.version_no || 1) + 1,
+        form_schema: pages.length ? { type: 'guided', pages } : (version.form_schema || null),
+        pdf_path: file ? null : version.pdf_path, media_url: mediaUrl || null,
+        status: 'published', change_note: pub.note || null, approved_by: profile.id, approved_at: new Date().toISOString(),
+      }).select('*').single()
+      if (ie) throw ie
+      // upload a new master file to the new version if one was chosen
+      if (file) {
+        const safe = file.name.replace(/[^\w.\-]+/g, '_'); const path = `${edit.id}/${safe}`
+        await supabase.storage.from('masters').upload(path, file, { upsert: true })
+        await supabase.from('document_versions').update({ pdf_path: path }).eq('id', nv.id)
+      }
+      // carry over understanding questions
+      const cleanQs = (test?.questions || []).filter(q => q.q && (q.options || []).length >= 2 && q.answer)
+      if (cleanQs.length) await supabase.from('tests').insert({ document_version_id: nv.id, pass_mark: Number(test.pass_mark) || 80, questions: cleanQs, shuffle: test.shuffle ?? true })
+      // obsolete the old version, point the doc at the new one
+      await supabase.from('document_versions').update({ status: 'obsolete' }).eq('id', version.id)
+      await supabase.from('documents').update({ current_version_id: nv.id }).eq('id', edit.id)
+      // re-assign as a refresher if chosen
+      if (pub.reassign === 'everyone') {
+        const { data: rows } = await supabase.from('assignments').select('employee_id, profiles!assignments_employee_id_fkey(status)').eq('document_id', edit.id)
+        const ids = [...new Set((rows || []).filter(r => r.profiles?.status === 'active').map(r => r.employee_id))]
+        const due = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+        if (ids.length) await supabase.from('assignments').insert(ids.map(id => ({ employee_id: id, document_id: edit.id, source: 'manual', assigned_by: profile.id, due_date: due })))
+        setMsg(`Version ${nv.version_no} published — re-assigned to ${ids.length} staff as a refresher.`)
+      } else {
+        setMsg(`Version ${nv.version_no} published. Previous version archived; existing records keep their signed version.`)
+      }
+      setPub(null); setEdit(null); load()
+    } catch (e) { setMsg(e.message || String(e)) }
+    setBusy(false)
   }
 
   const masterName = version?.pdf_path ? version.pdf_path.split('/').pop() : null
@@ -176,6 +218,41 @@ function Documents() {
           <input value={edit.conditions ? JSON.stringify(edit.conditions) : ''} onChange={e => {
             try { setEdit({ ...edit, conditions: e.target.value ? JSON.parse(e.target.value) : null }) } catch { /* typing */ }
           }} placeholder="blank = applies to everyone" />
+
+          {edit.id && (
+            <div className="fb-section" style={{ marginTop: 14 }}>
+              <div className="row between">
+                <label style={{ margin: 0 }}>Version history</label>
+                {!pub && <button type="button" className="small secondary" onClick={() => setPub({ note: '', reassign: 'none' })}>Publish as new version</button>}
+              </div>
+              <table><tbody>
+                {versions.map(v => (
+                  <tr key={v.id}>
+                    <td><b>v{v.version_no}</b></td>
+                    <td><span className={`badge ${v.status === 'obsolete' ? 'expired' : 'completed'}`}>{v.status || 'published'}</span></td>
+                    <td className="muted">{v.change_note || '—'}</td>
+                    <td className="muted">{v.approved_at ? fmtDate(v.approved_at) : ''}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+              {pub && (
+                <div style={{ marginTop: 8 }}>
+                  <label>What changed in this version?</label>
+                  <input value={pub.note} onChange={e => setPub({ ...pub, note: e.target.value })} placeholder="e.g. Updated award rate clause" />
+                  <label style={{ marginTop: 8 }}>Re-assign to staff?</label>
+                  <select value={pub.reassign} onChange={e => setPub({ ...pub, reassign: e.target.value })}>
+                    <option value="none">No — new hires only (existing records keep their version)</option>
+                    <option value="everyone">Yes — re-assign to everyone who had it (refresher)</option>
+                  </select>
+                  <div className="row" style={{ marginTop: 10 }}>
+                    <button type="button" onClick={publishNewVersion} disabled={busy}>{busy ? 'Publishing…' : 'Publish version'}</button>
+                    <button type="button" className="secondary" onClick={() => setPub(null)}>Cancel</button>
+                  </div>
+                  <p className="muted" style={{ fontSize: 12 }}>Publishing snapshots the content above as a new version, archives the previous one (kept &amp; retrievable), and points new completions at the new version.</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="row" style={{ marginTop: 12 }}>
             <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
