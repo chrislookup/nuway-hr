@@ -96,3 +96,5 @@ video { width: 100%; border-radius: 8px; }
 .fb-section { border: 1px solid #e0e6e0; border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: #fafcfa; }
 .fb-block { border: 1px solid #e6ebe6; border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fff; }
 .formbuilder label { font-size: 13px; }
+
+.note-assessor { background: #eef6f0; border: 1px solid #cfe6d6; border-radius: 8px; padding: 8px 10px; color: #2b5c3b; font-size: 13px; }

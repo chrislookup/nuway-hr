@@ -51,6 +51,7 @@ export default function CompleteDoc({ profile }) {
   const mine = a.employee_id === profile.id
 
   const guided = !!version?.form_schema?.pages
+  const hasAssessor = !!version?.form_schema?.pages?.some(p => p.assessor)
   async function submit() {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
@@ -102,7 +103,7 @@ export default function CompleteDoc({ profile }) {
       }
       let status = 'completed'
       if (test && !passed) status = 'awaiting_review'
-      else if (doc.requires_manager_signoff || doc.requires_assessor_signoff || doc.requires_admin_signoff) status = 'awaiting_review'
+      else if (doc.requires_manager_signoff || doc.requires_assessor_signoff || doc.requires_admin_signoff || hasAssessor) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
         upd.completed_at = new Date().toISOString()

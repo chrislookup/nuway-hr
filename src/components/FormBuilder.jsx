@@ -50,6 +50,14 @@ export default function FormBuilder({ pages, onChange }) {
               <button type="button" className="danger small" onClick={() => removeSection(si)}>✕</button>
             </div>
           </div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400, marginTop: 6, fontSize: 13 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={!!sec.assessor} onChange={e => patchSection(si, { assessor: e.target.checked })} />
+            Completed by a competent person / supervisor (locked to the employee, verified & signed by an assessor)
+          </label>
+          {sec.assessor && (
+            <input value={sec.assessorNote || ''} onChange={e => patchSection(si, { assessorNote: e.target.value })}
+              placeholder="What the competent person confirms (e.g. 'Observed safe forklift operation')" style={{ marginTop: 4 }} />
+          )}
 
           {openS === si && (
             <div style={{ marginTop: 8 }}>
