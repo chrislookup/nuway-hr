@@ -15,6 +15,7 @@ export const STATUS_LABELS = {
   completed: 'Completed',
   overdue: 'Overdue',
   expired: 'Expired',
+  rejected: 'Returned',
 }
 
 export const CAPABILITIES = [

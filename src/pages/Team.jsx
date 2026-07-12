@@ -6,6 +6,7 @@ export default function Team({ profile }) {
   const [people, setPeople] = useState(null)
   const [reviews, setReviews] = useState([])
   const [busyId, setBusyId] = useState(null)
+  const [rej, setRej] = useState({ id: null, reason: '' })
 
   async function load() {
     const { data: profs } = await supabase.from('profiles')
@@ -40,6 +41,17 @@ export default function Team({ profile }) {
     setBusyId(null)
   }
 
+  async function reject(a) {
+    if (!rej.reason.trim()) return
+    setBusyId(a.id)
+    await supabase.from('assignments').update({
+      status: 'rejected', rejection_reason: rej.reason.trim(),
+      reviewed_by: profile.id, reviewed_at: new Date().toISOString(), completed_at: null,
+    }).eq('id', a.id)
+    setRej({ id: null, reason: '' })
+    await load(); setBusyId(null)
+  }
+
   if (!people) return <p className="muted">Loading…</p>
 
   return (
@@ -55,8 +67,19 @@ export default function Team({ profile }) {
                 <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
                 <td className="muted">{fmtDate(a.completed_at)}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <Link to={`/employee/${a.employee_id}`}><button className="secondary small">View</button></Link>{' '}
-                  <button className="small" disabled={busyId === a.id} onClick={() => signOff(a)}>Sign off</button>
+                  {rej.id === a.id ? (
+                    <div className="row" style={{ justifyContent: 'flex-end' }}>
+                      <input autoFocus placeholder="Reason for returning…" value={rej.reason} onChange={e => setRej({ ...rej, reason: e.target.value })} style={{ width: 240 }} />
+                      <button className="danger small" disabled={busyId === a.id || !rej.reason.trim()} onClick={() => reject(a)}>Confirm return</button>
+                      <button className="secondary small" onClick={() => setRej({ id: null, reason: '' })}>Cancel</button>
+                    </div>
+                  ) : (
+                    <>
+                      <Link to={`/employee/${a.employee_id}`}><button className="secondary small">View</button></Link>{' '}
+                      <button className="small" disabled={busyId === a.id} onClick={() => signOff(a)}>Sign off</button>{' '}
+                      <button className="danger small" onClick={() => setRej({ id: a.id, reason: '' })}>Return</button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}

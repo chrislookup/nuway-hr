@@ -89,3 +89,5 @@ video { width: 100%; border-radius: 8px; }
   .ackbox { background: #fff !important; border: 1px solid #ccc; }
   a { color: #000 !important; text-decoration: none; }
 }
+
+.badge.rejected { background: #fdecec; color: #b42318; }

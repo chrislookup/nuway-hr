@@ -70,7 +70,9 @@ export default function Dashboard({ profile }) {
           <tbody>
             {open.map(a => (
               <tr key={a.id}>
-                <td><Link to={`/doc/${a.id}`}><b>{a.documents?.code}</b> {a.documents?.title}</Link></td>
+                <td><Link to={`/doc/${a.id}`}><b>{a.documents?.code}</b> {a.documents?.title}</Link>
+                  {a.status === 'rejected' && a.rejection_reason && <div style={{ fontSize: 12, color: '#b42318' }}>Returned: {a.rejection_reason}</div>}
+                </td>
                 <td className="muted">due {fmtDate(a.due_date)}</td>
                 <td><StatusBadge assignment={a} /></td>
                 <td style={{ textAlign: 'right' }}><Link to={`/doc/${a.id}`}><button className="small">Open</button></Link></td>

@@ -103,7 +103,7 @@ export default function CompleteDoc({ profile }) {
       let status = 'completed'
       if (test && !passed) status = 'awaiting_review'
       else if (doc.requires_manager_signoff) status = 'awaiting_review'
-      const upd = { status }
+      const upd = { status, rejection_reason: null }
       if (status === 'completed') {
         upd.completed_at = new Date().toISOString()
         if (doc.recurrence_months) {
@@ -123,6 +123,12 @@ export default function CompleteDoc({ profile }) {
       <a onClick={() => nav(-1)} style={{ cursor: 'pointer' }}>&larr; Back</a>
       <h1>{doc.code} — {doc.title}</h1>
       <p className="muted">{doc.document_categories?.name} · due {fmtDate(a.due_date)}</p>
+
+      {a.status === 'rejected' && (
+        <div className="error" style={{ marginBottom: 12 }}>
+          <b>This was returned for correction.</b>{a.rejection_reason ? ` Reason: ${a.rejection_reason}` : ''} Please review and submit again.
+        </div>
+      )}
 
       <div className="doc-content">
         {version?.media_url && (
