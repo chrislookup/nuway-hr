@@ -6,6 +6,19 @@ import StatusBadge from '../components/StatusBadge'
 export default function Dashboard({ profile }) {
   const [assignments, setAssignments] = useState(null)
   const [licences, setLicences] = useState([])
+  const [assessQ, setAssessQ] = useState([])
+
+  function loadAssess() {
+    supabase.from('assignments')
+      .select('*, documents(code, title, requires_assessor_signoff), profiles!assignments_employee_id_fkey(first_name, last_name)')
+      .eq('status', 'awaiting_review')
+      .then(({ data }) => setAssessQ((data || []).filter(a => a.documents?.requires_assessor_signoff && a.employee_id !== profile.id)))
+  }
+  async function assessorSignOff(a) {
+    await supabase.from('completions').update({ verified_by: profile.id, verified_at: new Date().toISOString() }).eq('assignment_id', a.id)
+    await supabase.from('assignments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', a.id)
+    loadAssess()
+  }
 
   useEffect(() => {
     supabase.from('assignments')
@@ -17,6 +30,7 @@ export default function Dashboard({ profile }) {
       .select('*, licence_types(name)')
       .eq('employee_id', profile.id).eq('active', true)
       .then(({ data }) => setLicences(data || []))
+    if (profile.can_assess) loadAssess()
   }, [profile.id])
 
   if (!assignments) return <p className="muted">Loading…</p>
@@ -46,6 +60,25 @@ export default function Dashboard({ profile }) {
         <div className="card stat red"><div className="n">{overdue}</div><div className="l">Overdue</div></div>
         <div className="card stat amber"><div className="n">{awaiting}</div><div className="l">Awaiting sign-off</div></div>
       </div>
+
+      {profile.can_assess && assessQ.length > 0 && (
+        <div className="card">
+          <h2>Assessments awaiting your sign-off ({assessQ.length})</h2>
+          <p className="muted">You're a competent person for these. Confirm each staff member has demonstrated the competency, then sign off.</p>
+          <table><tbody>
+            {assessQ.map(a => (
+              <tr key={a.id}>
+                <td>{a.profiles?.first_name} {a.profiles?.last_name}</td>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <Link to={`/record/${a.id}`}><button className="secondary small">View</button></Link>{' '}
+                  <button className="small" onClick={() => assessorSignOff(a)}>Sign off</button>
+                </td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
 
       <div className="card">
         <h2>Training matrix</h2>

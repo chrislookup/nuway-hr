@@ -102,7 +102,7 @@ export default function CompleteDoc({ profile }) {
       }
       let status = 'completed'
       if (test && !passed) status = 'awaiting_review'
-      else if (doc.requires_manager_signoff) status = 'awaiting_review'
+      else if (doc.requires_manager_signoff || doc.requires_assessor_signoff || doc.requires_admin_signoff) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
         upd.completed_at = new Date().toISOString()
