@@ -98,3 +98,10 @@ video { width: 100%; border-radius: 8px; }
 .formbuilder label { font-size: 13px; }
 
 .navbadge { display: inline-block; min-width: 18px; text-align: center; margin-left: 8px; padding: 1px 6px; border-radius: 10px; background: #b42318; color: #fff; font-size: 11px; font-weight: 700; vertical-align: middle; }
+
+/* grouped list tables (dashboard to-do / completed) */
+.listgrouped { width: 100%; }
+.listgrouped .cathead td { padding-top: 16px; padding-bottom: 4px; font-weight: 700; color: #2b3a2f; border-bottom: 1px solid #e0e6e0; }
+.listgrouped .col-due { width: 150px; white-space: nowrap; }
+.listgrouped .col-status { width: 120px; }
+.listgrouped .col-act { width: 110px; text-align: right; white-space: nowrap; }

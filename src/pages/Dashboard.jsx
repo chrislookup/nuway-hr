@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmtDate, isOverdue } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
@@ -72,42 +72,44 @@ export default function Dashboard({ profile }) {
       <div className="card">
         <h2>To do ({open.length})</h2>
         {open.length === 0 && <p className="success">All caught up — nothing outstanding.</p>}
-        {Object.entries(groupByCat(open)).map(([cat, items]) => (
-          <div key={cat} style={{ marginTop: 10 }}>
-            <h3>{cat}</h3>
-            <table><tbody>
-              {items.map(a => (
-                <tr key={a.id}>
-                  <td><Link to={`/doc/${a.id}`}><b>{a.documents?.code}</b> {a.documents?.title}</Link>
-                    {a.status === 'rejected' && a.rejection_reason && <div style={{ fontSize: 12, color: '#b42318' }}>Returned: {a.rejection_reason}</div>}
-                  </td>
-                  <td className="muted">due {fmtDate(a.due_date)}</td>
-                  <td><StatusBadge assignment={a} /></td>
-                  <td style={{ textAlign: 'right' }}><Link to={`/doc/${a.id}`}><button className="small">Open</button></Link></td>
-                </tr>
-              ))}
-            </tbody></table>
-          </div>
-        ))}
+        {open.length > 0 && (
+          <table className="listgrouped"><tbody>
+            {Object.entries(groupByCat(open)).map(([cat, items]) => (
+              <Fragment key={cat}>
+                <tr className="cathead"><td colSpan={4}>{cat}</td></tr>
+                {items.map(a => (
+                  <tr key={a.id}>
+                    <td><Link to={`/doc/${a.id}`}><b>{a.documents?.code}</b> {a.documents?.title}</Link>
+                      {a.status === 'rejected' && a.rejection_reason && <div style={{ fontSize: 12, color: '#b42318' }}>Returned: {a.rejection_reason}</div>}
+                    </td>
+                    <td className="muted col-due">due {fmtDate(a.due_date)}</td>
+                    <td className="col-status"><StatusBadge assignment={a} /></td>
+                    <td className="col-act"><Link to={`/doc/${a.id}`}><button className="small">Open</button></Link></td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody></table>
+        )}
       </div>
 
       {done > 0 && (
         <div className="card">
           <h2>My completed records</h2>
-          {Object.entries(groupByCat(assignments.filter(a => a.status === 'completed'))).map(([cat, items]) => (
-            <div key={cat} style={{ marginTop: 10 }}>
-              <h3>{cat}</h3>
-              <table><tbody>
+          <table className="listgrouped"><tbody>
+            {Object.entries(groupByCat(assignments.filter(a => a.status === 'completed'))).map(([cat, items]) => (
+              <Fragment key={cat}>
+                <tr className="cathead"><td colSpan={3}>{cat}</td></tr>
                 {items.map(a => (
                   <tr key={a.id}>
                     <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
-                    <td className="muted">{fmtDate(a.completed_at)}</td>
-                    <td style={{ textAlign: 'right' }}><Link to={`/record/${a.id}`}>View / print</Link></td>
+                    <td className="muted col-due">{fmtDate(a.completed_at)}</td>
+                    <td className="col-act"><Link to={`/record/${a.id}`}>View / print</Link></td>
                   </tr>
                 ))}
-              </tbody></table>
-            </div>
-          ))}
+              </Fragment>
+            ))}
+          </tbody></table>
         </div>
       )}
 
