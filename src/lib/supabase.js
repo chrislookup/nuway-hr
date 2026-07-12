@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
+// Public URL where the app is deployed (GitHub Pages). Used for auth email redirects.
+export const APP_URL = 'https://chrislookup.github.io/nuway-hr/'
+
 export const supabase = createClient(
   'https://qaxuyvmftvbkvgdwhlkp.supabase.co',
   'sb_publishable_I-hZVyI6F6HgYJ4aaqvcxA_y7Yq92ME'

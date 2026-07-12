@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, APP_URL } from '../lib/supabase'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -19,7 +19,7 @@ export default function Login() {
   async function forgot() {
     if (!email) { setErr('Enter your email first, then tap Forgot password.'); return }
     setErr(''); setMsg('')
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim())
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: APP_URL })
     if (error) setErr(error.message)
     else setMsg('Password reset email sent — check your inbox.')
   }

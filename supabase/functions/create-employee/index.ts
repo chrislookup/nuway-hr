@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
 
     const { data: created, error: ue } = await admin.auth.admin.inviteUserByEmail(b.email, {
       data: { first_name: b.first_name, last_name: b.last_name },
+      redirectTo: 'https://chrislookup.github.io/nuway-hr/',
     })
     if (ue) return json({ error: ue.message }, 400)
     const uid = created.user.id
