@@ -27,6 +27,12 @@ export default function Dashboard({ profile }) {
   const open = assignments.filter(a => !['completed', 'expired'].includes(a.status))
   const pct = assignments.length ? Math.round(done / assignments.length * 100) : 0
 
+  const groupByCat = (list) => {
+    const g = {}
+    for (const a of list) { const c = a.documents?.document_categories?.name || 'Other'; (g[c] = g[c] || []).push(a) }
+    return g
+  }
+
   // training matrix: group by category
   const byCat = {}
   for (const a of assignments) {
@@ -66,34 +72,42 @@ export default function Dashboard({ profile }) {
       <div className="card">
         <h2>To do ({open.length})</h2>
         {open.length === 0 && <p className="success">All caught up — nothing outstanding.</p>}
-        <table>
-          <tbody>
-            {open.map(a => (
-              <tr key={a.id}>
-                <td><Link to={`/doc/${a.id}`}><b>{a.documents?.code}</b> {a.documents?.title}</Link>
-                  {a.status === 'rejected' && a.rejection_reason && <div style={{ fontSize: 12, color: '#b42318' }}>Returned: {a.rejection_reason}</div>}
-                </td>
-                <td className="muted">due {fmtDate(a.due_date)}</td>
-                <td><StatusBadge assignment={a} /></td>
-                <td style={{ textAlign: 'right' }}><Link to={`/doc/${a.id}`}><button className="small">Open</button></Link></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {Object.entries(groupByCat(open)).map(([cat, items]) => (
+          <div key={cat} style={{ marginTop: 10 }}>
+            <h3>{cat}</h3>
+            <table><tbody>
+              {items.map(a => (
+                <tr key={a.id}>
+                  <td><Link to={`/doc/${a.id}`}><b>{a.documents?.code}</b> {a.documents?.title}</Link>
+                    {a.status === 'rejected' && a.rejection_reason && <div style={{ fontSize: 12, color: '#b42318' }}>Returned: {a.rejection_reason}</div>}
+                  </td>
+                  <td className="muted">due {fmtDate(a.due_date)}</td>
+                  <td><StatusBadge assignment={a} /></td>
+                  <td style={{ textAlign: 'right' }}><Link to={`/doc/${a.id}`}><button className="small">Open</button></Link></td>
+                </tr>
+              ))}
+            </tbody></table>
+          </div>
+        ))}
       </div>
 
       {done > 0 && (
         <div className="card">
           <h2>My completed records</h2>
-          <table><tbody>
-            {assignments.filter(a => a.status === 'completed').map(a => (
-              <tr key={a.id}>
-                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
-                <td className="muted">{fmtDate(a.completed_at)}</td>
-                <td style={{ textAlign: 'right' }}><Link to={`/record/${a.id}`}>View / print</Link></td>
-              </tr>
-            ))}
-          </tbody></table>
+          {Object.entries(groupByCat(assignments.filter(a => a.status === 'completed'))).map(([cat, items]) => (
+            <div key={cat} style={{ marginTop: 10 }}>
+              <h3>{cat}</h3>
+              <table><tbody>
+                {items.map(a => (
+                  <tr key={a.id}>
+                    <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                    <td className="muted">{fmtDate(a.completed_at)}</td>
+                    <td style={{ textAlign: 'right' }}><Link to={`/record/${a.id}`}>View / print</Link></td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </div>
+          ))}
         </div>
       )}
 
