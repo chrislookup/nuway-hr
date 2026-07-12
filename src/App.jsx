@@ -40,6 +40,18 @@ export default function App() {
   if (!profile) return null
   // First login after invite → force a password to be set
   if (profile.must_set_password) return <SetPassword mode="first" onDone={() => setReload(r => r + 1)} />
+  // Past employees lose portal access (admins are never blocked)
+  if (profile.status && profile.status !== 'active' && profile.tier !== 'admin') {
+    return (
+      <div className="login-wrap">
+        <div className="card login-box" style={{ textAlign: 'center' }}>
+          <h1>Access removed</h1>
+          <p className="muted">Your access to the Nuway HR portal has been removed. If you believe this is a mistake, please contact your manager.</p>
+          <button className="secondary small" onClick={() => supabase.auth.signOut()}>Sign out</button>
+        </div>
+      </div>
+    )
+  }
 
   const tier = profile.tier
   const isMgr = tier === 'manager' || tier === 'admin'

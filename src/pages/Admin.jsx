@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase, CAPABILITIES } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
@@ -275,14 +276,21 @@ function People({ profile }) {
   const [mla, setMla] = useState([])
   const [caps, setCaps] = useState([])
   const [msg, setMsg] = useState('')
+  const [filt, setFilt] = useState('active')
 
   async function load() {
-    const { data } = await supabase.from('profiles').select('*, employee_locations(locations(name))').order('first_name')
+    const { data } = await supabase.from('profiles').select('*, employee_locations(is_primary, locations(name))').order('first_name')
     setPeople(data || [])
     const { data: l } = await supabase.from('locations').select('*').eq('active', true).order('name')
     setLocations(l || [])
   }
   useEffect(() => { load() }, [])
+
+  function locName(p) {
+    const els = p.employee_locations || []
+    const prim = els.find(e => e.is_primary) || els[0]
+    return prim?.locations?.name || 'Unassigned'
+  }
 
   async function open(p) {
     setSel(p); setMsg('')
@@ -305,25 +313,53 @@ function People({ profile }) {
   }
   async function deactivate() {
     await supabase.from('profiles').update({ status: 'terminated', end_date: new Date().toISOString().slice(0, 10) }).eq('id', sel.id)
-    setMsg('Marked as past employee (records kept).'); load()
+    setSel({ ...sel, status: 'terminated' }); setMsg('Marked as past employee — records kept, portal access removed.'); load()
   }
+  async function reactivate() {
+    await supabase.from('profiles').update({ status: 'active', end_date: null }).eq('id', sel.id)
+    setSel({ ...sel, status: 'active' }); setMsg('Employee reactivated — portal access restored.'); load()
+  }
+
+  const shown = people
+    .filter(p => filt === 'all' ? true : filt === 'past' ? p.status !== 'active' : p.status === 'active')
+    .sort((a, b) => (locName(a).localeCompare(locName(b))) || `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
+  const counts = {
+    active: people.filter(p => p.status === 'active').length,
+    past: people.filter(p => p.status !== 'active').length,
+  }
+  let lastLoc = null
 
   return (
     <div className="card">
       <h2>People &amp; access</h2>
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button className={`small ${filt === 'active' ? '' : 'secondary'}`} onClick={() => setFilt('active')}>Active ({counts.active})</button>
+        <button className={`small ${filt === 'past' ? '' : 'secondary'}`} onClick={() => setFilt('past')}>Past employees ({counts.past})</button>
+        <button className={`small ${filt === 'all' ? '' : 'secondary'}`} onClick={() => setFilt('all')}>All</button>
+      </div>
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <div style={{ width: 300 }}>
-          {people.map(p => (
-            <div key={p.id} onClick={() => open(p)} style={{ padding: '7px 10px', borderRadius: 7, cursor: 'pointer', background: sel?.id === p.id ? '#e0f2e6' : 'transparent', opacity: p.status === 'active' ? 1 : .5 }}>
-              {p.first_name} {p.last_name} <span className="muted">· {p.tier}</span>
-            </div>
-          ))}
+          {shown.length === 0 && <p className="muted">No {filt === 'past' ? 'past employees' : 'people'} to show.</p>}
+          {shown.map(p => {
+            const loc = locName(p); const showHeader = loc !== lastLoc; lastLoc = loc
+            return (
+              <div key={p.id}>
+                {showHeader && <div className="muted" style={{ fontSize: 12, fontWeight: 700, margin: '10px 0 2px', textTransform: 'uppercase', letterSpacing: .3 }}>{loc}</div>}
+                <div onClick={() => open(p)} style={{ padding: '7px 10px', borderRadius: 7, cursor: 'pointer', background: sel?.id === p.id ? '#e0f2e6' : 'transparent', opacity: p.status === 'active' ? 1 : .55 }}>
+                  {p.first_name} {p.last_name} <span className="muted">· {p.tier}{p.status !== 'active' ? ' · past' : ''}</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
         <div style={{ flex: 1 }}>
-          {!sel && <p className="muted">Select a person to manage their access.</p>}
+          {!sel && <p className="muted">Select a person to manage their access, or view their records.</p>}
           {sel && (<>
-            <h3>{sel.first_name} {sel.last_name}</h3>
-            {msg && <div className="success">{msg}</div>}
+            <div className="row between">
+              <h3 style={{ margin: 0 }}>{sel.first_name} {sel.last_name}{sel.status !== 'active' && <span className="muted"> · past employee</span>}</h3>
+              <Link to={`/employee/${sel.id}`}>View training records →</Link>
+            </div>
+            {msg && <div className="success" style={{ marginTop: 8 }}>{msg}</div>}
             <label>Access tier</label>
             <div className="row">
               {['employee', 'manager', 'admin'].map(t => (
@@ -340,8 +376,10 @@ function People({ profile }) {
                 {CAPABILITIES.map(([c, lab]) => <label key={c}><input type="checkbox" checked={caps.includes(c)} onChange={() => toggleCap(c)} />{lab}</label>)}
               </div>
             </>)}
-            {sel.status === 'active' && sel.id !== profile.id && (
-              <button className="danger small" style={{ marginTop: 16 }} onClick={deactivate}>Mark as past employee</button>
+            {sel.id !== profile.id && (
+              sel.status === 'active'
+                ? <button className="danger small" style={{ marginTop: 16 }} onClick={deactivate}>Mark as past employee</button>
+                : <button className="small" style={{ marginTop: 16 }} onClick={reactivate}>↩ Reactivate employee (restore access)</button>
             )}
           </>)}
         </div>
