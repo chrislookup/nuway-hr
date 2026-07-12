@@ -27,6 +27,14 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
               if (b.type === 'note') return <p key={bi} className="muted" style={{ fontSize: 13 }}>{b.text}</p>
               if (b.type === 'field') {
                 const v = values[b.name] ?? b.default ?? ''
+                if (b.input === 'checkbox') {
+                  return (
+                    <label key={bi} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, marginTop: 10 }}>
+                      <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={!!values[b.name]} onChange={e => set(b.name, e.target.checked)} />
+                      <span>{b.label}{b.required && ' *'}</span>
+                    </label>
+                  )
+                }
                 return (
                   <div key={bi} style={{ marginTop: 8 }}>
                     <label>{b.label}{b.required && ' *'}</label>
@@ -106,7 +114,9 @@ export function validateGuided(schema, values, assessorMode = false) {
   for (const pg of schema.pages) {
     if (pg.assessor && !assessorMode) continue
     for (const b of (pg.blocks || [])) {
-      if (b.type === 'field' && b.required && !String(values[b.name] ?? b.default ?? '').trim())
+      if (b.type === 'field' && b.required && b.input === 'checkbox' && !values[b.name])
+        return `Please tick: ${b.label}`
+      if (b.type === 'field' && b.required && b.input !== 'checkbox' && !String(values[b.name] ?? b.default ?? '').trim())
         return `Please complete: ${b.label}`
       if (b.type === 'ack') {
         if (!values[b.name]) return `Please tick: “${b.text.slice(0, 60)}${b.text.length > 60 ? '…' : ''}”`

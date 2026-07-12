@@ -14,11 +14,6 @@ export default function Dashboard({ profile }) {
       .eq('status', 'awaiting_review')
       .then(({ data }) => setAssessQ((data || []).filter(a => a.documents?.requires_assessor_signoff && a.employee_id !== profile.id)))
   }
-  async function assessorSignOff(a) {
-    await supabase.from('completions').update({ verified_by: profile.id, verified_at: new Date().toISOString() }).eq('assignment_id', a.id)
-    await supabase.from('assignments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', a.id)
-    loadAssess()
-  }
 
   useEffect(() => {
     supabase.from('assignments')
@@ -78,7 +73,7 @@ export default function Dashboard({ profile }) {
                 <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
                 <td style={{ textAlign: 'right' }}>
                   <Link to={`/record/${a.id}`}><button className="secondary small">View</button></Link>{' '}
-                  <button className="small" onClick={() => assessorSignOff(a)}>Sign off</button>
+                  <Link to={`/assess/${a.id}`}><button className="small">Complete &amp; sign</button></Link>
                 </td>
               </tr>
             ))}
