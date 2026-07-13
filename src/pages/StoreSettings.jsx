@@ -16,7 +16,7 @@ export default function StoreSettings({ profile }) {
   async function load() {
     const { data: l } = await supabase.from('locations').select('*').eq('active', true).order('name')
     setLocations(l || [])
-    const { data: v } = await supabase.from('vehicles').select('*, locations(name), documents(code, title)').order('rego')
+    const { data: v } = await supabase.from('vehicles').select('*, locations(name)').order('rego')
     setVehicles(v || [])
     const { data: d } = await supabase.from('documents').select('id, code, title').eq('active', true).order('code')
     setDocs(d || [])
@@ -109,7 +109,7 @@ export default function StoreSettings({ profile }) {
                   <td>{v.type || '—'}</td>
                   <td><b>{v.rego}</b></td>
                   <td className="muted">{v.name}</td>
-                  <td className="muted">{v.documents ? `${v.documents.code} ${v.documents.title}` : '—'}</td>
+                  <td className="muted">{(() => { const d = docs.find(x => x.id === v.induction_document_id); return d ? `${d.code} ${d.title}` : '—' })()}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
                 </tr>
               ))}

@@ -522,6 +522,12 @@ function Organisation() {
     setLocations(l.data || []); setRoles(r.data || []); setVehicles(v.data || []); setLicTypes(t.data || [])
   }
   useEffect(() => { load() }, [])
+  async function deleteVehicle(v) {
+    if (!window.confirm(`Delete ${v.name || v.rego}? This can't be undone.`)) return
+    const { error } = await supabase.from('vehicles').delete().eq('id', v.id)
+    if (error) { window.alert(/foreign key|violates/i.test(error.message) ? 'This vehicle has inductions assigned — set it Inactive on the Store page instead.' : error.message); return }
+    load()
+  }
 
   return (
     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -547,7 +553,7 @@ function Organisation() {
       </div>
       <div className="card">
         <h2>Vehicles</h2>
-        <table><tbody>{vehicles.map(v => <tr key={v.id}><td>{v.name}</td><td>{v.rego}</td><td className="muted">{v.locations?.name}</td></tr>)}</tbody></table>
+        <table><tbody>{vehicles.map(v => <tr key={v.id}><td className="muted">{v.type || '—'}</td><td>{v.name}</td><td>{v.rego}</td><td className="muted">{v.locations?.name}</td><td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td></tr>)}</tbody></table>
         <div className="row" style={{ marginTop: 10 }}>
           <input style={{ width: 140 }} placeholder="Name" value={nv.name} onChange={e => setNv({ ...nv, name: e.target.value })} />
           <input style={{ width: 110 }} placeholder="Rego" value={nv.rego} onChange={e => setNv({ ...nv, rego: e.target.value })} />
