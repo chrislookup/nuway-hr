@@ -48,6 +48,14 @@ Deno.serve(async (req) => {
       await admin.from('employee_job_roles').insert(
         b.roles.map((r: string) => ({ employee_id: uid, job_role_id: r })))
     }
+    // vehicle inductions for the employee's store(s)
+    if (b.locations?.length) {
+      const { data: vehs } = await admin.from('vehicles').select('id, induction_document_id')
+        .in('location_id', b.locations).eq('active', true).not('induction_document_id', 'is', null)
+      if (vehs?.length) {
+        await admin.from('assignments').insert(vehs.map((v) => ({ employee_id: uid, document_id: v.induction_document_id, vehicle_id: v.id, source: 'manual', assigned_by: user.id })))
+      }
+    }
     const { data: n } = await admin.rpc('assign_role_packs', { emp: uid })
     const { count } = await admin.from('assignments').select('*', { count: 'exact', head: true }).eq('employee_id', uid)
     return json({ ok: true, employee_id: uid, assigned: count ?? n ?? 0 })
