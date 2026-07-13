@@ -50,7 +50,7 @@ export default function Dashboard({ profile }) {
   const done = current.filter(a => a.status === 'completed').length
   const overdue = current.filter(isOverdue).length
   const awaiting = current.filter(a => a.status === 'awaiting_review').length
-  const open = current.filter(a => !['completed', 'expired'].includes(a.status))
+  const open = current.filter(a => !['completed', 'expired'].includes(a.status) && !a.suspended)
   const pct = current.length ? Math.round(done / current.length * 100) : 0
 
   const groupByCat = (list) => {

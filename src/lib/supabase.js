@@ -16,6 +16,7 @@ export const STATUS_LABELS = {
   overdue: 'Overdue',
   expired: 'Expired',
   rejected: 'Returned',
+  suspended: 'On hold',
 }
 
 export const CAPABILITIES = [
@@ -33,5 +34,5 @@ export function fmtDate(d) {
 }
 
 export function isOverdue(a) {
-  return a.due_date && !['completed', 'expired'].includes(a.status) && new Date(a.due_date) < new Date()
+  return a.due_date && !a.suspended && !['completed', 'expired'].includes(a.status) && new Date(a.due_date) < new Date()
 }

@@ -28,6 +28,7 @@ export default function EmployeeDetail({ profile }) {
       .select('*, documents(code, title, document_categories(name)), completions(document_versions(version_no)), vehicles(rego))')
       .eq('employee_id', id).order('due_date', { nullsFirst: false })
     setAssignments(a || [])
+
     const { data: l } = await supabase.from('licences').select('*, licence_types(name)').eq('employee_id', id).eq('active', true)
     setLicences(l || [])
     const { data: d } = await supabase.from('documents').select('id, code, title').eq('active', true).order('code')
@@ -102,6 +103,11 @@ export default function EmployeeDetail({ profile }) {
     setImpBusy(false)
   }
 
+  async function setSuspended(a, val) {
+    const { error } = await supabase.from('assignments').update({ suspended: val }).eq('id', a.id)
+    if (error) { setMsg('Could not update: ' + error.message); return }
+    setMsg(val ? 'Document put on hold.' : 'Document resumed.'); load()
+  }
   if (!emp) return <p className="muted">Loading…</p>
   const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
@@ -159,6 +165,9 @@ export default function EmployeeDetail({ profile }) {
                       <>
                         {['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}{' '}
                         {['completed', 'awaiting_review'].includes(a.status) && <button className="danger small" onClick={() => setRej({ id: a.id, reason: '' })}>Return</button>}
+                        {!['completed', 'awaiting_review'].includes(a.status) && (a.suspended
+                          ? <button className="small" onClick={() => setSuspended(a, false)}>Resume</button>
+                          : <button className="secondary small" onClick={() => setSuspended(a, true)}>Suspend</button>)}
                       </>
                     )}
                   </td>
