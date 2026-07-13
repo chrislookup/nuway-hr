@@ -10,6 +10,7 @@ export default function StoreSettings({ profile }) {
   const [vehicles, setVehicles] = useState([])
   const [docs, setDocs] = useState([])
   const [nv, setNv] = useState({ type: 'Forklift', rego: '', name: '', location_id: '', induction_document_id: '' })
+  const [edit, setEdit] = useState(null)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -65,6 +66,18 @@ export default function StoreSettings({ profile }) {
     if (error) { setMsg(/foreign key|violates/i.test(error.message) ? 'This vehicle has inductions assigned to staff — set it Inactive instead of deleting.' : error.message); return }
     setMsg(''); load()
   }
+  function startEdit(v) {
+    setEdit({ id: v.id, type: v.type || 'Truck', rego: v.rego || '', name: v.name || '', location_id: v.location_id || '', induction_document_id: v.induction_document_id || '' })
+  }
+  async function saveEdit() {
+    if (!edit.rego.trim() || !edit.location_id) { setMsg('Enter a rego and choose a store.'); return }
+    const { error } = await supabase.from('vehicles').update({
+      type: edit.type, rego: edit.rego.trim(), name: edit.name.trim() || `${edit.type} ${edit.rego.trim()}`,
+      location_id: edit.location_id, induction_document_id: edit.induction_document_id || null,
+    }).eq('id', edit.id)
+    if (error) { setMsg(error.message); return }
+    setEdit(null); setMsg('Saved.'); load()
+  }
 
   const byLoc = {}
   for (const v of shownVehicles) { const n = v.locations?.name || 'Unassigned'; (byLoc[n] = byLoc[n] || []).push(v) }
@@ -104,15 +117,31 @@ export default function StoreSettings({ profile }) {
           <table>
             <thead><tr><th>Type</th><th>Rego</th><th>Name</th><th>Induction</th><th /></tr></thead>
             <tbody>
-              {list.map(v => (
+              {list.map(v => (edit && edit.id === v.id ? (
+                <tr key={v.id}>
+                  <td><select value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value })}>{TYPES.map(t => <option key={t}>{t}</option>)}</select></td>
+                  <td><input style={{ width: 90 }} value={edit.rego} onChange={e => setEdit({ ...edit, rego: e.target.value })} /></td>
+                  <td><input value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} placeholder="Name / description" /></td>
+                  <td>
+                    <select value={edit.location_id} onChange={e => setEdit({ ...edit, location_id: e.target.value })}>
+                      {allowedLocs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                    <select style={{ marginTop: 4 }} value={edit.induction_document_id} onChange={e => setEdit({ ...edit, induction_document_id: e.target.value })}>
+                      <option value="">— no induction —</option>
+                      {docs.map(d => <option key={d.id} value={d.id}>{d.code} {d.title}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small" onClick={saveEdit}>Save</button> <button className="small secondary" onClick={() => setEdit(null)}>Cancel</button></td>
+                </tr>
+              ) : (
                 <tr key={v.id} style={{ opacity: v.active ? 1 : .5 }}>
                   <td>{v.type || '—'}</td>
                   <td><b>{v.rego}</b></td>
                   <td className="muted">{v.name}</td>
                   <td className="muted">{(() => { const d = docs.find(x => x.id === v.induction_document_id); return d ? `${d.code} ${d.title}` : '—' })()}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small secondary" onClick={() => startEdit(v)}>Edit</button> <button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
