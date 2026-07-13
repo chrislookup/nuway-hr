@@ -81,6 +81,31 @@ function Documents({ profile }) {
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
 
+  async function archiveDoc(d, active) {
+    await supabase.from('documents').update({ active }).eq('id', d.id)
+    setMsg(active ? `Restored “${d.code} ${d.title}”.` : `Archived “${d.code} ${d.title}”.`); load()
+  }
+  async function deleteDoc(d) {
+    const { data: asg } = await supabase.from('assignments').select('id').eq('document_id', d.id)
+    const ids = (asg || []).map(x => x.id)
+    let compCount = 0
+    if (ids.length) { const { count } = await supabase.from('completions').select('id', { count: 'exact', head: true }).in('assignment_id', ids); compCount = count || 0 }
+    if (compCount > 0) { window.alert(`Can't delete “${d.code} ${d.title}” — it has ${compCount} signed record(s). Keep it archived so those records stay intact.`); return }
+    if (!window.confirm(`Permanently delete “${d.code} ${d.title}” and all its versions? This can't be undone.`)) return
+    try {
+      const { data: vs } = await supabase.from('document_versions').select('id').eq('document_id', d.id)
+      const vids = (vs || []).map(v => v.id)
+      if (vids.length) await supabase.from('tests').delete().in('document_version_id', vids)
+      if (ids.length) await supabase.from('assignments').delete().eq('document_id', d.id)
+      await supabase.from('pack_documents').delete().eq('document_id', d.id)
+      await supabase.from('documents').update({ current_version_id: null }).eq('id', d.id)
+      if (vids.length) await supabase.from('document_versions').delete().eq('document_id', d.id)
+      const { error } = await supabase.from('documents').delete().eq('id', d.id)
+      if (error) throw error
+      setMsg(`Deleted “${d.code} ${d.title}”.`); load()
+    } catch (e) { window.alert('Delete failed: ' + (e.message || e)) }
+  }
+
   async function saveInPlace() {
     setBusy(true); setMsg('')
     const d = { ...edit }; delete d.document_categories
@@ -285,19 +310,46 @@ function Documents({ profile }) {
       <table>
         <thead><tr><th>Code</th><th>Title</th><th>Category</th><th>Type</th><th>Emp</th><th>Mgr</th><th>Adm</th><th /></tr></thead>
         <tbody>
-          {docs.map(d => (
-            <tr key={d.id} style={{ opacity: d.active ? 1 : .45 }}>
+          {docs.filter(d => d.active).map(d => (
+            <tr key={d.id}>
               <td><b>{d.code}</b></td><td>{d.title}</td>
               <td className="muted">{d.document_categories?.name}</td>
               <td className="muted">{d.doc_type}</td>
-              <td>{d.requires_signature ? '✓' : ''}</td>
-              <td>{d.requires_manager_signoff ? '✓' : ''}</td>
-              <td>{d.requires_admin_signoff ? '✓' : ''}</td>
-              <td><button className="secondary small" onClick={() => openEdit(d)}>Edit</button></td>
+              <td>{d.requires_signature ? '\u2713' : ''}</td>
+              <td>{d.requires_manager_signoff ? '\u2713' : ''}</td>
+              <td>{d.requires_admin_signoff ? '\u2713' : ''}</td>
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <button className="secondary small" onClick={() => openEdit(d)}>Edit</button>{' '}
+                <button className="small" onClick={() => archiveDoc(d, false)}>Archive</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {docs.some(d => !d.active) && (
+        <div className="fb-section" style={{ marginTop: 18 }}>
+          <h3 style={{ margin: '0 0 4px' }}>Archived documents</h3>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Hidden from staff and not assigned to new hires. Restore to bring one back, or delete permanently.</p>
+          <table>
+            <thead><tr><th>Code</th><th>Title</th><th>Category</th><th>Type</th><th /></tr></thead>
+            <tbody>
+              {docs.filter(d => !d.active).map(d => (
+                <tr key={d.id} style={{ opacity: .7 }}>
+                  <td><b>{d.code}</b></td><td>{d.title}</td>
+                  <td className="muted">{d.document_categories?.name}</td>
+                  <td className="muted">{d.doc_type}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="secondary small" onClick={() => openEdit(d)}>View</button>{' '}
+                    <button className="small" onClick={() => archiveDoc(d, true)}>Restore</button>{' '}
+                    <button className="small" style={{ color: '#b00020' }} onClick={() => deleteDoc(d)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
