@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
 const PdfFieldEditor = lazy(() => import('../components/PdfFieldEditor'))
-import { supabase, CAPABILITIES, fmtDate } from '../lib/supabase'
+import { supabase, CAPABILITIES, fmtDate, catRank } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
 
@@ -43,7 +43,8 @@ function Documents({ profile }) {
 
   async function load() {
     const { data } = await supabase.from('documents').select('*, document_categories(name)').order('code')
-    setDocs(data || [])
+    const sorted = (data || []).sort((a, b) => catRank(a.document_categories?.name) - catRank(b.document_categories?.name) || (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }))
+    setDocs(sorted)
     const { data: c } = await supabase.from('document_categories').select('*').order('code')
     setCats(c || [])
   }

@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase, fmtDate, isOverdue } from '../lib/supabase'
+import { supabase, fmtDate, isOverdue, byCatRank } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import LicenceForm from '../components/LicenceForm'
 
@@ -103,7 +103,7 @@ export default function Dashboard({ profile }) {
         <table>
           <thead><tr><th>Area</th><th>Progress</th><th style={{ textAlign: 'right' }}>Done</th></tr></thead>
           <tbody>
-            {Object.entries(byCat).map(([cat, v]) => (
+            {Object.entries(byCat).sort(([a], [b]) => byCatRank(a, b)).map(([cat, v]) => (
               <tr key={cat}>
                 <td>{cat}</td>
                 <td><div className="progressbar"><div style={{ width: `${v.total ? v.done / v.total * 100 : 0}%` }} /></div></td>
@@ -119,7 +119,7 @@ export default function Dashboard({ profile }) {
         {open.length === 0 && <p className="success">All caught up — nothing outstanding.</p>}
         {open.length > 0 && (
           <table className="listgrouped"><tbody>
-            {Object.entries(groupByCat(open)).map(([cat, items]) => (
+            {Object.entries(groupByCat(open)).sort(([a], [b]) => byCatRank(a, b)).map(([cat, items]) => (
               <Fragment key={cat}>
                 <tr className="cathead"><td colSpan={4}>{cat}</td></tr>
                 {items.map(a => (
@@ -142,7 +142,7 @@ export default function Dashboard({ profile }) {
         <div className="card">
           <h2>My completed records</h2>
           <table className="listgrouped"><tbody>
-            {Object.entries(groupByCat(current.filter(a => a.status === 'completed'))).map(([cat, items]) => (
+            {Object.entries(groupByCat(current.filter(a => a.status === 'completed'))).sort(([a], [b]) => byCatRank(a, b)).map(([cat, items]) => (
               <Fragment key={cat}>
                 <tr className="cathead"><td colSpan={3}>{cat}</td></tr>
                 {items.map(a => (

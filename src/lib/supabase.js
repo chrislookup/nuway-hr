@@ -36,3 +36,30 @@ export function fmtDate(d) {
 export function isOverdue(a) {
   return a.due_date && !a.suspended && !['completed', 'expired'].includes(a.status) && new Date(a.due_date) < new Date()
 }
+
+export const CAT_ORDER = {
+  'New Employee Forms & Administration': 0,
+  'Company Policy': 2,
+  'Risk Management and Hazard Reporting': 3,
+  'Incident Reporting and Investigation': 4,
+  'Induction, Training, Skill and Competencies': 5,
+  'Emergency Response Management': 6,
+  'First Aid Management': 7,
+  'Hazardous Substances Management': 8,
+  'Asbestos Management': 9,
+  'Electrical Equipment Management': 10,
+  'Plant and Equipment Safety Management': 11,
+  'Workplace Inspections': 12,
+  'Consultation Requirement': 13,
+  'Traffic Management': 15,
+  'Manual Handling Management': 17,
+  'PPE Management': 18,
+  'Health and Wellbeing Management': 19,
+  'Safety Bulletins': 20,
+  'Epidemic / Pandemic / COVID-19': 21,
+  'Safe Work Procedures': 100,
+  'Sales': 101,
+  'Culture': 102,
+}
+export const catRank = (name) => (CAT_ORDER[name] ?? 200)
+export const byCatRank = (a, b) => catRank(a) - catRank(b) || String(a).localeCompare(String(b))

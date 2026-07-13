@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { supabase, fmtDate } from '../lib/supabase'
+import { supabase, fmtDate, byCatRank } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import LicenceForm from '../components/LicenceForm'
 
@@ -145,7 +145,7 @@ export default function EmployeeDetail({ profile }) {
             <button className="small" onClick={assign} disabled={!addDoc}>Assign</button>
           </div>
         </div>
-        {Object.entries(byCat).map(([cat, list]) => (
+        {Object.entries(byCat).sort(([a], [b]) => byCatRank(a, b)).map(([cat, list]) => (
           <div key={cat} style={{ marginTop: 14 }}>
             <h3>{cat}</h3>
             <table><tbody>
