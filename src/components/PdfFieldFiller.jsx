@@ -8,7 +8,8 @@ const SIGNER_COLOR = { employee: '#1a73e8', competent: '#137333' }
 const today = () => new Date().toISOString().slice(0, 10)
 
 // role = 'employee' | 'competent'  → those fields are interactive; others show read-only.
-export default function PdfFieldFiller({ pdfUrl, fields, role, values, onChange }) {
+export default function PdfFieldFiller({ pdfUrl, fields, role, roles, values, onChange }) {
+  const editable = roles || (role ? [role] : [])
   const [pages, setPages] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
@@ -43,7 +44,7 @@ export default function PdfFieldFiller({ pdfUrl, fields, role, values, onChange 
   // default this role's date fields to today
   useEffect(() => {
     const patch = {}
-    for (const f of flds) if (f.signer === role && f.type === 'date' && !vals[f.id]) patch[f.id] = today()
+    for (const f of flds) if (editable.includes(f.signer) && f.type === 'date' && !vals[f.id]) patch[f.id] = today()
     if (Object.keys(patch).length) onChange({ ...vals, ...patch })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages.length])
@@ -60,7 +61,7 @@ export default function PdfFieldFiller({ pdfUrl, fields, role, values, onChange 
           <img src={pg.url} alt={`page ${pg.num}`} style={{ width: '100%', display: 'block' }} draggable={false} />
           {flds.filter(f => f.page === pg.num).map(f => {
             const c = SIGNER_COLOR[f.signer] || '#666'
-            const mine = f.signer === role
+            const mine = editable.includes(f.signer)
             const v = vals[f.id]
             const box = {
               position: 'absolute', left: `${f.x * 100}%`, top: `${f.y * 100}%`,

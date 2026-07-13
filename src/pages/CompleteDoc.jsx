@@ -21,6 +21,8 @@ export default function CompleteDoc({ profile }) {
   const [busy, setBusy] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfVals, setPdfVals] = useState({})
+  const [cpName, setCpName] = useState('')
+  const [draftMsg, setDraftMsg] = useState('')
 
   useEffect(() => {
     (async () => {
@@ -29,6 +31,7 @@ export default function CompleteDoc({ profile }) {
         .eq('id', assignmentId).single()
       setA(asg)
       if (!asg) return
+      try { const d = JSON.parse(localStorage.getItem(`nuwayhr_draft_${asg.id}`) || 'null'); if (d) { setPdfVals(d.pdfVals || {}); setSignedName(d.signedName || ''); setAgree(!!d.agree); setCpName(d.cpName || '') } } catch (e) { /* ignore */ }
       const vid = asg.documents.current_version_id
       if (vid) {
         const { data: v } = await supabase.from('document_versions').select('*').eq('id', vid).single()
@@ -69,42 +72,46 @@ export default function CompleteDoc({ profile }) {
     }
     if (needsSig && !signedName.trim()) { setErr('Please type your full name to sign.'); return }
     if (needsSig && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    if (compFields.length) {
+      for (const f of compFields) { if (!f.required) continue; const val = pdfVals[f.id]; if (f.type === 'checkbox' ? !val : (!val || (typeof val === 'string' && !val.trim()))) { setErr('The competent person still needs to complete their fields (marked *). Not available now? Use “Save draft” and come back.'); return } }
+      if (!cpName.trim()) { setErr('Please enter the competent person’s name.'); return }
+    }
     setBusy(true)
     try {
       const persist = {}, flat = {}
-      let sigPath = null
-      for (const f of empFields) {
+      let sigPath = null, verPath = null
+      const active = compFields.length ? [...empFields, ...compFields] : empFields
+      for (const f of active) {
         const val = pdfVals[f.id]
         if (val === undefined || val === '' || val === false) continue
         if (f.type === 'signature' || f.type === 'initials') {
           const blob = await (await fetch(val)).blob()
-          const p = `${a.employee_id}/${a.id}-emp-${f.id}.png`
+          const p = `${a.employee_id}/${a.id}-${f.signer}-${f.id}.png`
           const { error } = await supabase.storage.from('signatures').upload(p, blob, { upsert: true })
           if (error) throw error
           persist[f.id] = p; flat[f.id] = val
-          if (!sigPath && f.type === 'signature') sigPath = p
+          if (f.type === 'signature') { if (f.signer === 'employee' && !sigPath) sigPath = p; if (f.signer === 'competent' && !verPath) verPath = p }
         } else { persist[f.id] = val; flat[f.id] = val }
       }
-      const needComp = compFields.length > 0 && doc.requires_assessor_signoff
-      let completed_pdf_path = null
-      if (!needComp) {
-        const masterBytes = await (await fetch(pdfUrl)).arrayBuffer()
-        const { flattenPdf } = await import('../lib/flattenPdf')
-        const bytes = await flattenPdf(masterBytes, pdfFields, flat)
-        completed_pdf_path = `${a.employee_id}/${a.id}-completed.pdf`
-        const { error: fe } = await supabase.storage.from('completed-docs').upload(completed_pdf_path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
-        if (fe) throw fe
-      }
+      const masterBytes = await (await fetch(pdfUrl)).arrayBuffer()
+      const { flattenPdf } = await import('../lib/flattenPdf')
+      const bytes = await flattenPdf(masterBytes, pdfFields, flat)
+      const completed_pdf_path = `${a.employee_id}/${a.id}-completed.pdf`
+      const { error: fe } = await supabase.storage.from('completed-docs').upload(completed_pdf_path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
+      if (fe) throw fe
       const { error: ce } = await supabase.from('completions').insert({
         assignment_id: a.id, document_version_id: version?.id,
         form_data: { pdf: { values: persist }, uploaded_file: null },
         signature_path: sigPath, signed_name: signedName || null,
         signed_at: new Date().toISOString(), completed_pdf_path,
+        verifier_name: compFields.length ? cpName.trim() : null,
+        verifier_signature_path: verPath,
+        verified_at: compFields.length ? new Date().toISOString() : null,
         user_agent: navigator.userAgent,
       })
       if (ce) throw ce
       let status = 'completed'
-      if (needComp || doc.requires_manager_signoff || doc.requires_admin_signoff) status = 'awaiting_review'
+      if (doc.requires_manager_signoff || doc.requires_admin_signoff) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
         upd.completed_at = new Date().toISOString()
@@ -112,9 +119,17 @@ export default function CompleteDoc({ profile }) {
       }
       const { error: ae } = await supabase.from('assignments').update(upd).eq('id', a.id)
       if (ae) throw ae
+      try { localStorage.removeItem(`nuwayhr_draft_${a.id}`) } catch (e) { /* ignore */ }
       nav('/')
     } catch (e) { setErr(e.message || String(e)) }
     setBusy(false)
+  }
+  function saveDraft() {
+    try {
+      localStorage.setItem(`nuwayhr_draft_${a.id}`, JSON.stringify({ pdfVals, signedName, agree, cpName }))
+      setErr(''); setDraftMsg('Draft saved on this device — reopen this document anytime to finish with the competent person.')
+      setTimeout(() => setDraftMsg(''), 6000)
+    } catch (e) { setErr('Could not save draft: ' + (e.message || e)) }
   }
   async function submit() {
     setErr('')
@@ -219,8 +234,8 @@ export default function CompleteDoc({ profile }) {
         {pdfUrl && <p><a href={pdfUrl} target="_blank" rel="noreferrer">Open document (PDF) ↗</a></p>}
         {isPdfForm && mine && !['completed'].includes(a.status) && (
           <Suspense fallback={<p className="muted">Loading form…</p>}>
-            <p className="muted" style={{ fontSize: 13 }}>Fill your fields on the form below{compFields.length ? ', then submit — a competent person signs their part after' : ''}.</p>
-            <PdfFieldFiller pdfUrl={pdfUrl} fields={pdfFields} role="employee" values={pdfVals} onChange={setPdfVals} />
+            <p className="muted" style={{ fontSize: 13 }}>Fill your fields on the form below.{compFields.length ? ' The blue fields are yours; the green fields are for the competent person to complete and sign with you before you submit.' : ''}</p>
+            <PdfFieldFiller pdfUrl={pdfUrl} fields={pdfFields} roles={compFields.length ? ['employee', 'competent'] : ['employee']} values={pdfVals} onChange={setPdfVals} />
           </Suspense>
         )}
         {!version?.media_url && !pdfUrl && !version?.form_schema && !isUpload && (
@@ -263,10 +278,20 @@ export default function CompleteDoc({ profile }) {
             {!isPdfForm && (<><label>Signature</label>
             <SignaturePad onChange={setSig} /></>)}
           </>)}
+          {isPdfForm && compFields.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e0e6e0' }}>
+              <label>Competent person’s name (they complete &amp; sign the green fields with you)</label>
+              <input value={cpName} onChange={e => setCpName(e.target.value)} placeholder="Full name of the supervisor / competent person" />
+            </div>
+          )}
+          {draftMsg && <div className="success" style={{ marginTop: 10 }}>{draftMsg}</div>}
           {err && <div className="error">{err}</div>}
-          <button style={{ marginTop: 14 }} onClick={isPdfForm ? submitPdf : submit} disabled={busy}>
-            {busy ? 'Submitting…' : doc.requires_manager_signoff ? 'Submit for manager sign-off' : 'Submit'}
-          </button>
+          <div className="row" style={{ marginTop: 14 }}>
+            <button onClick={isPdfForm ? submitPdf : submit} disabled={busy}>
+              {busy ? 'Submitting…' : doc.requires_manager_signoff ? 'Submit for manager sign-off' : 'Submit'}
+            </button>
+            {isPdfForm && <button className="secondary" onClick={saveDraft} disabled={busy}>Save draft</button>}
+          </div>
         </div>
       )}
       {a.status === 'completed' && <div className="success">Completed {fmtDate(a.completed_at)}{a.expires_at ? ` — next due ${fmtDate(a.expires_at)}` : ''}</div>}
