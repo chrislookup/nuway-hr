@@ -28,7 +28,7 @@ export default function Dashboard({ profile }) {
 
   useEffect(() => {
     supabase.from('assignments')
-      .select('*, documents(id, code, title, doc_type, requires_signature, category_id, document_categories(name)), completions(document_versions(version_no))')
+      .select('*, documents(id, code, title, doc_type, requires_signature, category_id, document_categories(name)), completions(document_versions(version_no)), vehicles(rego))')
       .eq('employee_id', profile.id)
       .order('due_date', { ascending: true, nullsFirst: false })
       .then(({ data }) => setAssignments(data || []))
@@ -87,7 +87,7 @@ export default function Dashboard({ profile }) {
             {assessQ.map(a => (
               <tr key={a.id}>
                 <td>{a.profiles?.first_name} {a.profiles?.last_name}</td>
-                <td><b>{a.documents?.code}</b> {a.documents?.title}{ver(a) ? ' · v' + ver(a) : ''}</td>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}{a.vehicles?.rego ? ' · ' + a.vehicles.rego : ''}{ver(a) ? ' · v' + ver(a) : ''}</td>
                 <td style={{ textAlign: 'right' }}>
                   <Link to={`/record/${a.id}`}><button className="secondary small">View</button></Link>{' '}
                   <Link to={`/assess/${a.id}`}><button className="small">Complete &amp; sign</button></Link>
@@ -147,7 +147,7 @@ export default function Dashboard({ profile }) {
                 <tr className="cathead"><td colSpan={3}>{cat}</td></tr>
                 {items.map(a => (
                   <tr key={a.id}>
-                    <td><b>{a.documents?.code}</b> {a.documents?.title}{ver(a) ? ' · v' + ver(a) : ''}</td>
+                    <td><b>{a.documents?.code}</b> {a.documents?.title}{a.vehicles?.rego ? ' · ' + a.vehicles.rego : ''}{ver(a) ? ' · v' + ver(a) : ''}</td>
                     <td className="muted col-due">{fmtDate(a.completed_at)}</td>
                     <td className="col-act"><Link to={`/record/${a.id}`}>View / print</Link></td>
                   </tr>
@@ -165,7 +165,7 @@ export default function Dashboard({ profile }) {
           <table><tbody>
             {superseded.map(a => (
               <tr key={a.id}>
-                <td><b>{a.documents?.code}</b> {a.documents?.title}{ver(a) ? ' · v' + ver(a) : ''}</td>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}{a.vehicles?.rego ? ' · ' + a.vehicles.rego : ''}{ver(a) ? ' · v' + ver(a) : ''}</td>
                 <td className="muted">{fmtDate(a.completed_at)}</td>
                 <td style={{ textAlign: 'right' }}>{['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}</td>
               </tr>
