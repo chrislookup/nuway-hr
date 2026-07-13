@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
 import SignaturePad from '../components/SignaturePad'
 import FormRenderer, { validateGuided } from '../components/FormRenderer'
+const PdfFieldFiller = lazy(() => import('../components/PdfFieldFiller'))
 
 export default function CompleteDoc({ profile }) {
   const { assignmentId } = useParams()
@@ -19,6 +20,7 @@ export default function CompleteDoc({ profile }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
+  const [pdfVals, setPdfVals] = useState({})
 
   useEffect(() => {
     (async () => {
@@ -53,6 +55,67 @@ export default function CompleteDoc({ profile }) {
   const guided = !!version?.form_schema?.pages
   const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
   const hasAssessor = assessorIdx.length > 0
+  const pdfFields = version?.pdf_field_map || []
+  const isPdfForm = doc.doc_type === 'pdf_form' && pdfFields.length > 0 && !!pdfUrl
+  const empFields = pdfFields.filter(f => f.signer === 'employee')
+  const compFields = pdfFields.filter(f => f.signer === 'competent')
+
+  async function submitPdf() {
+    setErr('')
+    for (const f of empFields) {
+      if (!f.required) continue
+      const val = pdfVals[f.id]
+      if (f.type === 'checkbox' ? !val : (!val || (typeof val === 'string' && !val.trim()))) { setErr('Please complete all required fields on the form (marked *).'); return }
+    }
+    if (needsSig && !signedName.trim()) { setErr('Please type your full name to sign.'); return }
+    if (needsSig && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    setBusy(true)
+    try {
+      const persist = {}, flat = {}
+      let sigPath = null
+      for (const f of empFields) {
+        const val = pdfVals[f.id]
+        if (val === undefined || val === '' || val === false) continue
+        if (f.type === 'signature' || f.type === 'initials') {
+          const blob = await (await fetch(val)).blob()
+          const p = `${a.employee_id}/${a.id}-emp-${f.id}.png`
+          const { error } = await supabase.storage.from('signatures').upload(p, blob, { upsert: true })
+          if (error) throw error
+          persist[f.id] = p; flat[f.id] = val
+          if (!sigPath && f.type === 'signature') sigPath = p
+        } else { persist[f.id] = val; flat[f.id] = val }
+      }
+      const needComp = compFields.length > 0 && doc.requires_assessor_signoff
+      let completed_pdf_path = null
+      if (!needComp) {
+        const masterBytes = await (await fetch(pdfUrl)).arrayBuffer()
+        const { flattenPdf } = await import('../lib/flattenPdf')
+        const bytes = await flattenPdf(masterBytes, pdfFields, flat)
+        completed_pdf_path = `${a.employee_id}/${a.id}-completed.pdf`
+        const { error: fe } = await supabase.storage.from('completed-docs').upload(completed_pdf_path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
+        if (fe) throw fe
+      }
+      const { error: ce } = await supabase.from('completions').insert({
+        assignment_id: a.id, document_version_id: version?.id,
+        form_data: { pdf: { values: persist }, uploaded_file: null },
+        signature_path: sigPath, signed_name: signedName || null,
+        signed_at: new Date().toISOString(), completed_pdf_path,
+        user_agent: navigator.userAgent,
+      })
+      if (ce) throw ce
+      let status = 'completed'
+      if (needComp || doc.requires_manager_signoff || doc.requires_admin_signoff) status = 'awaiting_review'
+      const upd = { status, rejection_reason: null }
+      if (status === 'completed') {
+        upd.completed_at = new Date().toISOString()
+        if (doc.recurrence_months) { const d = new Date(); d.setMonth(d.getMonth() + doc.recurrence_months); upd.expires_at = d.toISOString().slice(0, 10) }
+      }
+      const { error: ae } = await supabase.from('assignments').update(upd).eq('id', a.id)
+      if (ae) throw ae
+      nav('/')
+    } catch (e) { setErr(e.message || String(e)) }
+    setBusy(false)
+  }
   async function submit() {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
@@ -154,6 +217,12 @@ export default function CompleteDoc({ profile }) {
             : <p><a href={version.media_url} target="_blank" rel="noreferrer">Open training material ↗</a></p>
         )}
         {pdfUrl && <p><a href={pdfUrl} target="_blank" rel="noreferrer">Open document (PDF) ↗</a></p>}
+        {isPdfForm && mine && !['completed'].includes(a.status) && (
+          <Suspense fallback={<p className="muted">Loading form…</p>}>
+            <p className="muted" style={{ fontSize: 13 }}>Fill your fields on the form below{compFields.length ? ', then submit — a competent person signs their part after' : ''}.</p>
+            <PdfFieldFiller pdfUrl={pdfUrl} fields={pdfFields} role="employee" values={pdfVals} onChange={setPdfVals} />
+          </Suspense>
+        )}
         {!version?.media_url && !pdfUrl && !version?.form_schema && !isUpload && (
           <p className="muted">Content for this document hasn't been uploaded yet. You can still read the printed copy and sign below — or check back later.</p>
         )}
@@ -191,11 +260,11 @@ export default function CompleteDoc({ profile }) {
             )}
             <label>Full name</label>
             <input value={signedName} onChange={e => setSignedName(e.target.value)} placeholder="Type your full legal name" />
-            <label>Signature</label>
-            <SignaturePad onChange={setSig} />
+            {!isPdfForm && (<><label>Signature</label>
+            <SignaturePad onChange={setSig} /></>)}
           </>)}
           {err && <div className="error">{err}</div>}
-          <button style={{ marginTop: 14 }} onClick={submit} disabled={busy}>
+          <button style={{ marginTop: 14 }} onClick={isPdfForm ? submitPdf : submit} disabled={busy}>
             {busy ? 'Submitting…' : doc.requires_manager_signoff ? 'Submit for manager sign-off' : 'Submit'}
           </button>
         </div>

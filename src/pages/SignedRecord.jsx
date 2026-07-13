@@ -102,7 +102,7 @@ export default function SignedRecord() {
           </tbody></table>
         )}
 
-        {fileUrl && <p className="no-print" style={{ marginTop: 16 }}><a href={fileUrl} target="_blank" rel="noreferrer">Open uploaded signed document ↗</a></p>}
+        {fileUrl && <p className="no-print" style={{ marginTop: 16 }}><a href={fileUrl} target="_blank" rel="noreferrer">Open signed document (PDF) ↗</a></p>}
 
         <div className="record-sign">
           <h3>Electronic signature</h3>
