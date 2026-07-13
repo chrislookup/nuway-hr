@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
+const PdfFieldEditor = lazy(() => import('../components/PdfFieldEditor'))
 import { supabase, CAPABILITIES, fmtDate } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
@@ -28,6 +29,8 @@ function Documents({ profile }) {
   const [edit, setEdit] = useState(null)
   const [version, setVersion] = useState(null)
   const [file, setFile] = useState(null)
+  const [pdfFields, setPdfFields] = useState([])
+  const [pdfEditUrl, setPdfEditUrl] = useState('')
   const [mediaUrl, setMediaUrl] = useState('')
   const [pages, setPages] = useState([])
   const [test, setTest] = useState(null)
@@ -45,20 +48,31 @@ function Documents({ profile }) {
     setCats(c || [])
   }
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    let revoke
+    async function mk() {
+      if (edit?.doc_type !== 'pdf_form') { setPdfEditUrl(''); return }
+      if (file && /pdf$/i.test(file.type || file.name)) { const u = URL.createObjectURL(file); revoke = u; setPdfEditUrl(u); return }
+      if (version?.pdf_path) { const { data } = await supabase.storage.from('masters').createSignedUrl(version.pdf_path, 3600); setPdfEditUrl(data?.signedUrl || ''); return }
+      setPdfEditUrl('')
+    }
+    mk()
+    return () => { if (revoke) URL.revokeObjectURL(revoke) }
+  }, [edit?.doc_type, file, version?.pdf_path])
 
   async function openEdit(d) {
     setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setSaveAsk(false); setChangeNote(''); setReassign(false)
     if (d?.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
-      setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || [])
+      setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || []); setPdfFields(v?.pdf_field_map || [])
       const { data: tst } = await supabase.from('tests').select('*').eq('document_version_id', d.current_version_id).maybeSingle()
       setTest(tst || null)
       const { data: vs } = await supabase.from('document_versions').select('*').eq('document_id', d.id).order('version_no', { ascending: false })
       setVersions(vs || [])
-    } else { setVersions([]) }
+    } else { setVersions([]); setPdfFields([]) }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false)
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([])
     setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -93,9 +107,10 @@ function Documents({ profile }) {
       if (fe) { setMsg('File upload failed: ' + fe.message); setBusy(false); return }
       pdf_path = path
     }
-    if (versionId && (file || mediaUrl || version || edit.doc_type === 'web_form')) {
+    if (versionId && (file || mediaUrl || version || edit.doc_type === 'web_form' || edit.doc_type === 'pdf_form')) {
       const vpatch = { pdf_path, media_url: mediaUrl || null }
       if (edit.doc_type === 'web_form') vpatch.form_schema = pages.length ? { type: 'guided', pages } : null
+      if (edit.doc_type === 'pdf_form') vpatch.pdf_field_map = pdfFields
       await supabase.from('document_versions').update(vpatch).eq('id', versionId)
     }
     // understanding questions (tests)
@@ -126,6 +141,7 @@ function Documents({ profile }) {
         document_id: edit.id, version_no: newNo,
         form_schema: edit.doc_type === 'web_form' ? (pages.length ? { type: 'guided', pages } : null) : (version?.form_schema || null),
         pdf_path, media_url: mediaUrl || null, notes: changeNote || null, created_by: profile.id,
+        pdf_field_map: edit.doc_type === 'pdf_form' ? pdfFields : (version?.pdf_field_map || null),
       }).select('*').single()
       if (ie) throw ie
       if (file) { const { error: fe } = await supabase.storage.from('masters').upload(pdf_path, file, { upsert: true }); if (fe) throw fe }
@@ -201,6 +217,15 @@ function Documents({ profile }) {
             <div style={{ marginTop: 14 }}>
               <label>Form content (no code — build the sections your staff will complete)</label>
               <FormBuilder pages={pages} onChange={setPages} />
+            </div>
+          )}
+
+          {edit.doc_type === 'pdf_form' && (
+            <div style={{ marginTop: 14 }}>
+              <label>PDF fields — drop signature / date / text onto the form and tag who fills each</label>
+              {pdfEditUrl
+                ? <Suspense fallback={<p className="muted">Loading field tool…</p>}><PdfFieldEditor pdfUrl={pdfEditUrl} value={pdfFields} onChange={setPdfFields} /></Suspense>
+                : <p className="muted">Upload a PDF master above (then Save), and the form appears here to place fields on.</p>}
             </div>
           )}
 

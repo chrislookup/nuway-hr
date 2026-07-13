@@ -12,6 +12,8 @@
   "dependencies": {
     "@rolldown/pluginutils": "^1.0.1",
     "@supabase/supabase-js": "^2.110.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.7.76",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1"
