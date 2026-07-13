@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const TYPES = ['Truck', 'Forklift', 'Front-end loader', 'Other']
+const TYPES = ['Truck', 'Loader', 'Forklift']
 
 export default function StoreSettings({ profile }) {
   const isAdmin = profile.tier === 'admin'
@@ -59,6 +59,12 @@ export default function StoreSettings({ profile }) {
   async function toggleActive(v) {
     await supabase.from('vehicles').update({ active: !v.active }).eq('id', v.id); load()
   }
+  async function deleteVehicle(v) {
+    if (!window.confirm(`Delete ${v.type || 'vehicle'} ${v.rego}? This can't be undone.`)) return
+    const { error } = await supabase.from('vehicles').delete().eq('id', v.id)
+    if (error) { setMsg(/foreign key|violates/i.test(error.message) ? 'This vehicle has inductions assigned to staff — set it Inactive instead of deleting.' : error.message); return }
+    setMsg(''); load()
+  }
 
   const byLoc = {}
   for (const v of shownVehicles) { const n = v.locations?.name || 'Unassigned'; (byLoc[n] = byLoc[n] || []).push(v) }
@@ -104,7 +110,7 @@ export default function StoreSettings({ profile }) {
                   <td><b>{v.rego}</b></td>
                   <td className="muted">{v.name}</td>
                   <td className="muted">{v.documents ? `${v.documents.code} ${v.documents.title}` : '—'}</td>
-                  <td style={{ textAlign: 'right' }}><button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
                 </tr>
               ))}
             </tbody>
