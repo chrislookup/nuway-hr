@@ -21,6 +21,7 @@ export default function CompleteDoc({ profile }) {
   const [busy, setBusy] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfVals, setPdfVals] = useState({})
+  const [acks, setAcks] = useState({})
   const [cpName, setCpName] = useState('')
   const [draftMsg, setDraftMsg] = useState('')
 
@@ -56,6 +57,9 @@ export default function CompleteDoc({ profile }) {
   const mine = a.employee_id === profile.id
 
   const guided = !!version?.form_schema?.pages
+  const isStandard = doc.doc_type === 'standard'
+  const ackList = test?.ack_statements || []
+  const hasQuiz = (test?.questions || []).length > 0
   const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
   const hasAssessor = assessorIdx.length > 0
   const pdfFields = version?.pdf_field_map || []
@@ -72,6 +76,7 @@ export default function CompleteDoc({ profile }) {
     }
     if (needsSig && !signedName.trim()) { setErr('Please type your full name to sign.'); return }
     if (needsSig && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    if (ackList.length && ackList.some((_, i) => !acks[i])) { setErr('Please tick all the acknowledgement statements to confirm.'); return }
     if (compFields.length) {
       for (const f of compFields) { if (!f.required) continue; const val = pdfVals[f.id]; if (f.type === 'checkbox' ? !val : (!val || (typeof val === 'string' && !val.trim()))) { setErr('The competent person still needs to complete their fields (marked *). Not available now? Use “Save draft” and come back.'); return } }
       if (!cpName.trim()) { setErr('Please enter the competent person’s name.'); return }
@@ -101,7 +106,7 @@ export default function CompleteDoc({ profile }) {
       if (fe) throw fe
       const { error: ce } = await supabase.from('completions').insert({
         assignment_id: a.id, document_version_id: version?.id,
-        form_data: { pdf: { values: persist }, uploaded_file: null },
+        form_data: { pdf: { values: persist }, uploaded_file: null, ack: ackList.length ? ackList : null },
         signature_path: sigPath, signed_name: signedName || null,
         signed_at: new Date().toISOString(), completed_pdf_path,
         verifier_name: compFields.length ? cpName.trim() : null,
@@ -135,10 +140,12 @@ export default function CompleteDoc({ profile }) {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
-    if (needsSig && !guided && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    const showAgree = needsSig && !guided && !isPdfForm && !isStandard
+    if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    if (ackList.length && ackList.some((_, i) => !acks[i])) { setErr('Please tick all the acknowledgement statements to confirm.'); return }
     for (const pi of assessorIdx) { if (!values[`cp_${pi}_sig`] || !String(values[`cp_${pi}_name`] || '').trim()) { setErr('Each competent-person section needs the competent person’s name and signature.'); return } }
     if (isUpload && !file) { setErr('Please choose a file to upload.'); return }
-    if (test) {
+    if (hasQuiz) {
       const qs = test.questions || []
       if (qs.some((_, i) => answers[i] === undefined)) { setErr('Please answer every test question.'); return }
     }
@@ -169,7 +176,7 @@ export default function CompleteDoc({ profile }) {
         if (fe) throw fe
       }
       let passed = null, score = null
-      if (test) {
+      if (hasQuiz) {
         const qs = test.questions || []
         const pts = qs.reduce((s, q, i) => s + (answers[i] === q.answer ? (q.points || 1) : 0), 0)
         const total = qs.reduce((s, q) => s + (q.points || 1), 0)
@@ -179,7 +186,7 @@ export default function CompleteDoc({ profile }) {
       const { data: comp, error: ce } = await supabase.from('completions').insert({
         assignment_id: a.id,
         document_version_id: version?.id,
-        form_data: { ...cleanValues, uploaded_file: uploadedPath },
+        form_data: { ...cleanValues, uploaded_file: uploadedPath, ack: ackList.length ? ackList : null },
         signature_path, signed_name: signedName || null,
         signed_at: needsSig ? new Date().toISOString() : null,
         verifier_name: firstName, verifier_signature_path: firstPath,
@@ -188,7 +195,7 @@ export default function CompleteDoc({ profile }) {
         user_agent: navigator.userAgent,
       }).select().single()
       if (ce) throw ce
-      if (test) {
+      if (hasQuiz) {
         const { error: te } = await supabase.from('test_attempts').insert({
           assignment_id: a.id, test_id: test.id, answers, score, passed,
           review: passed ? 'passed_off' : 'pending',
@@ -196,7 +203,7 @@ export default function CompleteDoc({ profile }) {
         if (te) throw te
       }
       let status = 'completed'
-      if (test && !passed) status = 'awaiting_review'
+      if (hasQuiz && !passed) status = 'awaiting_review'
       else if (doc.requires_manager_signoff || doc.requires_admin_signoff || (doc.requires_assessor_signoff && !hasAssessor)) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
@@ -246,7 +253,7 @@ export default function CompleteDoc({ profile }) {
           <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} /></>)}
       </div>
 
-      {test && (
+      {hasQuiz && (
         <div className="card">
           <h2>Test — pass mark {Number(test.pass_mark)}%</h2>
           {(test.questions || []).map((q, i) => (
@@ -263,11 +270,22 @@ export default function CompleteDoc({ profile }) {
         </div>
       )}
 
+      {ackList.length > 0 && mine && a.status !== 'completed' && (
+        <div className="card">
+          <h2>Please confirm</h2>
+          {ackList.map((st, i) => (
+            <label key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, margin: '6px 0' }}>
+              <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={!!acks[i]} onChange={e => setAcks({ ...acks, [i]: e.target.checked })} /> {st}
+            </label>
+          ))}
+        </div>
+      )}
+
       {mine && !['completed'].includes(a.status) && (
         <div className="card">
           {needsSig && (<>
             <h2>Sign &amp; acknowledge</h2>
-            {!guided && (
+            {needsSig && !guided && !isPdfForm && !isStandard && (
               <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400 }}>
                 <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={agree} onChange={e => setAgree(e.target.checked)} />
                 I confirm I have read and understood this document, and my electronic signature below is my agreement to comply with it.

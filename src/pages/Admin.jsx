@@ -4,7 +4,19 @@ import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
 const PdfFieldEditor = lazy(() => import('../components/PdfFieldEditor'))
 import ConditionsBuilder from '../components/ConditionsBuilder'
-import { supabase, CAPABILITIES, fmtDate, catRank } from '../lib/supabase'
+import { supabase, CAPABILITIES, fmtDate, catRank, loadCatOrder } from '../lib/supabase'
+
+const DOC_TYPES = [
+  ['standard', 'Standard — view & sign'],
+  ['acknowledge', 'Acknowledge — read, tick & sign'],
+  ['web_form', 'Web form (fill in fields)'],
+  ['pdf_form', 'PDF form (sign on the PDF)'],
+  ['media', 'Video / online module'],
+  ['upload', 'Upload evidence (staff upload a file)'],
+  ['manual', 'Manual / reference'],
+  ['test', 'Test only'],
+  ['task', 'Task'],
+]
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
 
@@ -44,10 +56,11 @@ function Documents({ profile }) {
   const [busy, setBusy] = useState(false)
 
   async function load() {
+    await loadCatOrder()
     const { data } = await supabase.from('documents').select('*, document_categories(name)').order('code')
     const sorted = (data || []).sort((a, b) => catRank(a.document_categories?.name) - catRank(b.document_categories?.name) || (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }))
     setDocs(sorted)
-    const { data: c } = await supabase.from('document_categories').select('*').order('code')
+    const { data: c } = await supabase.from('document_categories').select('*').order('sort_order')
     setCats(c || [])
   }
   useEffect(() => { load() }, [])
@@ -76,7 +89,7 @@ function Documents({ profile }) {
   }
   function newDoc() {
     setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([]); setPdfEditorOpen(true)
-    setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
+    setEdit({ code: '', title: '', doc_type: 'standard', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
     if (!version?.pdf_path) return
@@ -144,9 +157,10 @@ function Documents({ profile }) {
     // understanding questions (tests)
     if (versionId) {
       const cleanQs = (test?.questions || []).filter(q => q.q && (q.options || []).length >= 2 && q.answer)
-      if (cleanQs.length) {
-        const payload = { pass_mark: Number(test.pass_mark) || 80, questions: cleanQs, shuffle: test.shuffle ?? true }
-        if (test.id) await supabase.from('tests').update(payload).eq('id', test.id)
+      const cleanAck = (test?.ack_statements || []).map(x => (x || '').trim()).filter(Boolean)
+      if (cleanQs.length || cleanAck.length) {
+        const payload = { pass_mark: Number(test?.pass_mark) || 80, questions: cleanQs, shuffle: test?.shuffle ?? true, ack_statements: cleanAck }
+        if (test?.id) await supabase.from('tests').update(payload).eq('id', test.id)
         else await supabase.from('tests').insert({ ...payload, document_version_id: versionId })
       } else if (test?.id) {
         await supabase.from('tests').delete().eq('id', test.id)
@@ -174,7 +188,8 @@ function Documents({ profile }) {
       if (ie) throw ie
       if (file) { const { error: fe } = await supabase.storage.from('masters').upload(pdf_path, file, { upsert: true }); if (fe) throw fe }
       const cleanQs = (test?.questions || []).filter(q => q.q && (q.options || []).length >= 2 && q.answer)
-      if (cleanQs.length) await supabase.from('tests').insert({ document_version_id: nv.id, pass_mark: Number(test.pass_mark) || 80, questions: cleanQs, shuffle: test.shuffle ?? true })
+      const cleanAck = (test?.ack_statements || []).map(x => (x || '').trim()).filter(Boolean)
+      if (cleanQs.length || cleanAck.length) await supabase.from('tests').insert({ document_version_id: nv.id, pass_mark: Number(test?.pass_mark) || 80, questions: cleanQs, shuffle: test?.shuffle ?? true, ack_statements: cleanAck })
       await supabase.from('documents').update({ current_version_id: nv.id }).eq('id', edit.id)
       let reassigned = 0
       if (reassign) {
@@ -211,7 +226,7 @@ function Documents({ profile }) {
               </select></div>
             <div style={{ flex: 1 }}><label>Type</label>
               <select value={edit.doc_type} onChange={e => setEdit({ ...edit, doc_type: e.target.value })}>
-                {['web_form', 'pdf_form', 'media', 'test', 'manual', 'upload', 'task'].map(t => <option key={t}>{t}</option>)}
+                {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select></div>
             <div style={{ flex: 1 }}><label>Completed by</label>
               <select value={edit.completed_by} onChange={e => setEdit({ ...edit, completed_by: e.target.value })}>
@@ -265,6 +280,17 @@ function Documents({ profile }) {
           <div style={{ marginTop: 14 }}>
             <label>Understanding questions (optional — checks the employee understood before it counts as complete)</label>
             <QuestionBuilder test={test} onChange={setTest} />
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <label>Acknowledgement statements (optional — staff must tick each to confirm)</label>
+            {((test?.ack_statements) || []).map((st, i) => (
+              <div key={i} className="row" style={{ gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                <input value={st} onChange={e => { const arr = [...(test?.ack_statements || [])]; arr[i] = e.target.value; setTest({ ...(test || { pass_mark: 80, questions: [] }), ack_statements: arr }) }} placeholder="e.g. I understand I must wear PPE at all times" />
+                <button type="button" className="danger small" onClick={() => setTest({ ...(test || { pass_mark: 80, questions: [] }), ack_statements: (test?.ack_statements || []).filter((_, j) => j !== i) })}>✕</button>
+              </div>
+            ))}
+            <button type="button" className="small secondary" onClick={() => setTest({ ...(test || { pass_mark: 80, questions: [] }), ack_statements: [...((test?.ack_statements) || []), ''] })}>+ Add statement</button>
           </div>
 
           <label style={{ marginTop: 10 }}>Who does this apply to? <span className="muted" style={{ fontWeight: 400 }}>(auto-assigned to new hires who match)</span></label>
@@ -594,15 +620,19 @@ function Organisation() {
   const [licTypes, setLicTypes] = useState([])
   const [nl, setNl] = useState(''); const [nr, setNr] = useState(''); const [nlt, setNlt] = useState('')
   const [nv, setNv] = useState({ name: '', rego: '', location_id: '' })
+  const [cats, setCats] = useState([])
+  const [nc, setNc] = useState({ code: '', name: '' })
+  const [editCat, setEditCat] = useState(null)
 
   async function load() {
-    const [l, r, v, t] = await Promise.all([
+    const [l, r, v, t, cc] = await Promise.all([
       supabase.from('locations').select('*').order('name'),
       supabase.from('job_roles').select('*').order('name'),
       supabase.from('vehicles').select('*, locations(name)').order('name'),
       supabase.from('licence_types').select('*').order('name'),
+      supabase.from('document_categories').select('*').order('sort_order'),
     ])
-    setLocations(l.data || []); setRoles(r.data || []); setVehicles(v.data || []); setLicTypes(t.data || [])
+    setLocations(l.data || []); setRoles(r.data || []); setVehicles(v.data || []); setLicTypes(t.data || []); setCats(cc.data || [])
   }
   useEffect(() => { load() }, [])
   async function deleteVehicle(v) {
@@ -611,9 +641,70 @@ function Organisation() {
     if (error) { window.alert(/foreign key|violates/i.test(error.message) ? 'This vehicle has inductions assigned — set it Inactive on the Store page instead.' : error.message); return }
     load()
   }
+  async function addCat() {
+    if (!nc.name.trim()) return
+    const max = Math.max(0, ...cats.map(c => c.sort_order || 0))
+    const { error } = await supabase.from('document_categories').insert({ code: nc.code.trim() || null, name: nc.name.trim(), sort_order: max + 1 })
+    if (error) { window.alert(error.message); return }
+    setNc({ code: '', name: '' }); load()
+  }
+  async function saveCat() {
+    const { error } = await supabase.from('document_categories').update({ code: editCat.code?.trim() || null, name: editCat.name.trim() }).eq('id', editCat.id)
+    if (error) { window.alert(error.message); return }
+    setEditCat(null); load()
+  }
+  async function delCat(c) {
+    const { count } = await supabase.from('documents').select('id', { count: 'exact', head: true }).eq('category_id', c.id)
+    if (count) { window.alert(`${count} document(s) use “${c.name}”. Move them to another category first.`); return }
+    if (!window.confirm(`Delete category “${c.name}”?`)) return
+    const { error } = await supabase.from('document_categories').delete().eq('id', c.id)
+    if (error) { window.alert(error.message); return }
+    load()
+  }
+  async function moveCat(c, dir) {
+    const arr = [...cats]; const i = arr.findIndex(x => x.id === c.id); const j = i + dir
+    if (j < 0 || j >= arr.length) return
+    const a = arr[i], b = arr[j]
+    await supabase.from('document_categories').update({ sort_order: b.sort_order }).eq('id', a.id)
+    await supabase.from('document_categories').update({ sort_order: a.sort_order }).eq('id', b.id)
+    load()
+  }
 
   return (
     <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+      <div className="card" style={{ gridColumn: '1 / -1' }}>
+        <h2>Document categories</h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>This order controls how categories are grouped everywhere in the app. Use ▲▼ to reorder.</p>
+        <table><tbody>
+          {cats.map((c, i) => (
+            <tr key={c.id}>
+              {editCat?.id === c.id ? (
+                <>
+                  <td style={{ width: 90 }}><input value={editCat.code || ''} onChange={e => setEditCat({ ...editCat, code: e.target.value })} placeholder="Code" /></td>
+                  <td><input value={editCat.name} onChange={e => setEditCat({ ...editCat, name: e.target.value })} /></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small" onClick={saveCat}>Save</button> <button className="small secondary" onClick={() => setEditCat(null)}>Cancel</button></td>
+                </>
+              ) : (
+                <>
+                  <td className="muted" style={{ width: 90 }}>{c.code}</td>
+                  <td>{c.name}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="small secondary" disabled={i === 0} onClick={() => moveCat(c, -1)}>▲</button>{' '}
+                    <button className="small secondary" disabled={i === cats.length - 1} onClick={() => moveCat(c, 1)}>▼</button>{' '}
+                    <button className="small secondary" onClick={() => setEditCat({ id: c.id, code: c.code, name: c.name })}>Edit</button>{' '}
+                    <button className="small" style={{ color: '#b00020' }} onClick={() => delCat(c)}>Delete</button>
+                  </td>
+                </>
+              )}
+            </tr>
+          ))}
+        </tbody></table>
+        <div className="row" style={{ marginTop: 10 }}>
+          <input style={{ width: 90 }} placeholder="Code" value={nc.code} onChange={e => setNc({ ...nc, code: e.target.value })} />
+          <input placeholder="New category name" value={nc.name} onChange={e => setNc({ ...nc, name: e.target.value })} />
+          <button className="small" onClick={addCat} disabled={!nc.name.trim()}>Add</button>
+        </div>
+      </div>
       <div className="card">
         <h2>Locations</h2>
         <table><tbody>{locations.map(l => (

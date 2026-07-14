@@ -1,11 +1,12 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase, fmtDate, isOverdue, byCatRank } from '../lib/supabase'
+import { supabase, fmtDate, isOverdue, byCatRank, loadCatOrder } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import LicenceForm from '../components/LicenceForm'
 
 export default function Dashboard({ profile }) {
   const [assignments, setAssignments] = useState(null)
+  const [, setCatReady] = useState(0)
   const [licences, setLicences] = useState([])
   const [assessQ, setAssessQ] = useState([])
   const [licenceTypes, setLicenceTypes] = useState([])
@@ -27,6 +28,7 @@ export default function Dashboard({ profile }) {
   }
 
   useEffect(() => {
+    loadCatOrder().then(() => setCatReady(x => x + 1))
     supabase.from('assignments')
       .select('*, documents(id, code, title, doc_type, requires_signature, category_id, document_categories(name)), completions(document_versions(version_no)), vehicles(rego))')
       .eq('employee_id', profile.id)

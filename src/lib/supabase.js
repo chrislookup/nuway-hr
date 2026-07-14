@@ -61,5 +61,11 @@ export const CAT_ORDER = {
   'Sales': 101,
   'Culture': 102,
 }
-export const catRank = (name) => (CAT_ORDER[name] ?? 200)
+let _catOrder = { ...CAT_ORDER }
+export async function loadCatOrder() {
+  const { data } = await supabase.from('document_categories').select('name, sort_order')
+  if (data) { const m = {}; for (const c of data) m[c.name] = c.sort_order ?? 999; _catOrder = m }
+  return _catOrder
+}
+export const catRank = (name) => (_catOrder[name] ?? 999)
 export const byCatRank = (a, b) => catRank(a) - catRank(b) || String(a).localeCompare(String(b))

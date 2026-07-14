@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { supabase, fmtDate, byCatRank } from '../lib/supabase'
+import { supabase, fmtDate, byCatRank, loadCatOrder } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import LicenceForm from '../components/LicenceForm'
 
@@ -21,6 +21,7 @@ export default function EmployeeDetail({ profile }) {
   const [showLic, setShowLic] = useState(false)
 
   async function load() {
+    await loadCatOrder()
     const { data: e } = await supabase.from('profiles')
       .select('*, employee_locations(locations(name)), employee_job_roles(job_roles(name))').eq('id', id).single()
     setEmp(e)
