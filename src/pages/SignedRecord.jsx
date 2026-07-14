@@ -13,6 +13,7 @@ export default function SignedRecord() {
   const [verifierSigUrl, setVerifierSigUrl] = useState(null)
   const [cpSigs, setCpSigs] = useState({})
   const [fileUrl, setFileUrl] = useState(null)
+  const [masterUrl, setMasterUrl] = useState(null)
   const [notfound, setNotfound] = useState(false)
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function SignedRecord() {
         .eq('assignment_id', assignmentId).order('created_at', { ascending: false }).limit(1).maybeSingle()
       setComp(c || null)
       const vid = c?.document_version_id || asg.documents?.current_version_id
-      if (vid) { const { data: v } = await supabase.from('document_versions').select('*').eq('id', vid).single(); setVersion(v) }
+      if (vid) { const { data: v } = await supabase.from('document_versions').select('*').eq('id', vid).single(); setVersion(v); if (v?.pdf_path) { const { data: mu } = await supabase.storage.from('masters').createSignedUrl(v.pdf_path, 3600); setMasterUrl(mu?.signedUrl || null) } }
       if (c?.signature_path) { const { data: s } = await supabase.storage.from('signatures').createSignedUrl(c.signature_path, 3600); setSigUrl(s?.signedUrl || null) }
       if (c?.verifier_signature_path) { const { data: vs } = await supabase.storage.from('signatures').createSignedUrl(c.verifier_signature_path, 3600); setVerifierSigUrl(vs?.signedUrl || null) }
       if (c?.verifier_data) { const map = {}; for (const [k, v] of Object.entries(c.verifier_data)) { if (v?.sig) { const { data: u } = await supabase.storage.from('signatures').createSignedUrl(v.sig, 3600); map[k] = u?.signedUrl || null } } setCpSigs(map) }
@@ -60,6 +61,12 @@ export default function SignedRecord() {
             <tr><td>Completed</td><td>{fmtDate(a.completed_at)}</td></tr>
           </tbody></table>
         </div>
+
+        {masterUrl && (
+          <p className="no-print" style={{ margin: '10px 0' }}>
+            <a href={masterUrl} target="_blank" rel="noreferrer">📄 Open the document exactly as it was when signed{version?.version_no ? ` — v${version.version_no}` : ''} ↗</a>
+          </p>
+        )}
 
         {pages && pages.map((pg, pi) => {
           const pfd = fd
