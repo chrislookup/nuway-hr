@@ -2,7 +2,7 @@
   --green: #1c7c43; --green-dark: #135c30; --bg: #f5f6f4; --card: #ffffff;
   --text: #1d2620; --muted: #6b7a70; --line: #e2e7e2;
   --red: #c0392b; --amber: #b7791f; --blue: #2563eb;
-  --teal: #0a8c9d; --teal-dark: #076f7c; --teal-light: #5cc4d3; --gray: #9b9ea1;
+  --teal: #008C95; --teal-dark: #00727a; --teal-light: #cfeff2; --gray: #9EA2A2;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
@@ -10,15 +10,15 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 a { color: var(--teal); text-decoration: none; }
 h1 { font-size: 1.5rem; margin: 0 0 4px; } h2 { font-size: 1.15rem; } h3 { font-size: 1rem; }
 .app { display: flex; min-height: 100vh; }
-.sidebar { width: 220px; background: #0b343b; color: #dbeef1; padding: 18px 0; flex-shrink: 0; display: flex; flex-direction: column; }
-.sidebar .brand { padding: 4px 18px 14px; border-bottom: 1px solid #14505a; text-align: center; }
+.sidebar { width: 220px; background: var(--teal); color: #eafafb; padding: 18px 0; flex-shrink: 0; display: flex; flex-direction: column; }
+.sidebar .brand { padding: 4px 18px 14px; border-bottom: 1px solid rgba(255,255,255,.22); text-align: center; }
 .sidebar .brand-text { font-weight: 700; font-size: 1.35rem; color: #fff; font-style: italic; letter-spacing: .5px; }
 .sidebar .brand-text span { color: var(--teal-light); font-style: normal; font-size: .8rem; font-weight: 700; vertical-align: super; }
 .brand-logo { max-width: 160px; height: auto; display: block; margin: 0 auto; }
 .sidebar nav { display: flex; flex-direction: column; margin-top: 10px; flex: 1; }
-.sidebar nav a { color: #cfe6ea; padding: 10px 18px; border-left: 3px solid transparent; }
-.sidebar nav a.active { background: #0f4a54; border-left-color: var(--teal-light); color: #fff; }
-.sidebar .whoami { padding: 12px 18px; font-size: .8rem; color: #a7cfd6; border-top: 1px solid #14505a; }
+.sidebar nav a { color: #eafafb; padding: 10px 18px; border-left: 3px solid transparent; }
+.sidebar nav a.active { background: rgba(0,0,0,.18); border-left-color: #fff; color: #fff; }
+.sidebar .whoami { padding: 12px 18px; font-size: .8rem; color: #d6f0f2; border-top: 1px solid rgba(255,255,255,.22); }
 .sidebar button { margin: 8px 18px; }
 .main { flex: 1; padding: 24px 28px; max-width: 1100px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
@@ -29,7 +29,7 @@ th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align
 tr:last-child td { border-bottom: none; }
 button, .btn { background: var(--teal); color: #fff; border: none; border-radius: 7px; padding: 9px 16px; font-size: .9rem; cursor: pointer; font-weight: 600; }
 button:hover { background: var(--teal-dark); }
-button.secondary { background: #eef2ee; color: var(--text); border: 1px solid var(--line); }
+button.secondary { background: #eef1f1; color: var(--text); border: 1px solid #d9dede; }
 button.danger { background: var(--red); }
 button.small { padding: 4px 10px; font-size: .8rem; }
 button:disabled { opacity: .5; cursor: default; }
