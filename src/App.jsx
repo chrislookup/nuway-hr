@@ -71,7 +71,10 @@ export default function App() {
     <HashRouter>
       <div className="app">
         <div className="sidebar">
-          <div className="brand">NU<span>WAY</span> HR</div>
+          <div className="brand">
+            <img src={`${import.meta.env.BASE_URL}nuway-logo.png`} alt="Nuway Landscape Supplies" className="brand-logo" onError={e => { e.currentTarget.style.display = 'none' }} onLoad={e => { const t = e.currentTarget.parentElement.querySelector('.brand-text'); if (t) t.style.display = 'none' }} />
+            <div className="brand-text">Nuway <span>HR</span></div>
+          </div>
           <nav>
             <NavLink to="/" end>My Dashboard</NavLink>
             {isMgr && <NavLink to="/team">Team{reviewCount > 0 && <span className="navbadge">{reviewCount}</span>}</NavLink>}

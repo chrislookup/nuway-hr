@@ -27,7 +27,8 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="card login-box">
-        <h1 style={{ textAlign: 'center' }}>NU<span style={{ color: 'var(--green)' }}>WAY</span> HR</h1>
+        <img src={`${import.meta.env.BASE_URL}nuway-logo.png`} alt="Nuway Landscape Supplies" style={{ maxWidth: 200, display: 'block', margin: '0 auto 6px' }} onError={e => { e.currentTarget.style.display = 'none' }} onLoad={e => { const h = e.currentTarget.parentElement.querySelector('.login-title'); if (h) h.style.display = 'none' }} />
+        <h1 className="login-title" style={{ textAlign: 'center', fontStyle: 'italic', color: 'var(--teal)' }}>Nuway <span style={{ fontStyle: 'normal', fontSize: '.8rem', verticalAlign: 'super', color: 'var(--text)' }}>HR</span></h1>
         <p className="muted" style={{ textAlign: 'center' }}>Training &amp; compliance portal</p>
         <form onSubmit={signIn}>
           <label>Email</label>
