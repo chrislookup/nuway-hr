@@ -148,16 +148,16 @@ export default function EmployeeDetail({ profile }) {
         {Object.entries(byCat).sort(([a], [b]) => byCatRank(a, b)).map(([cat, list]) => (
           <div key={cat} style={{ marginTop: 14 }}>
             <h3>{cat}</h3>
-            <table><tbody>
+            <table className="matrix"><tbody>
               {list.map(a => (
                 <tr key={a.id}>
                   <td><b>{a.documents?.code}</b> {a.documents?.title}{a.vehicles?.rego ? ' · ' + a.vehicles.rego : ''}{ver(a) ? ' · v' + ver(a) : ''}</td>
-                  <td className="muted">due {fmtDate(a.due_date)}</td>
-                  <td><StatusBadge assignment={a} /></td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td className="muted col-due">due {fmtDate(a.due_date)}</td>
+                  <td className="col-status"><StatusBadge assignment={a} /></td>
+                  <td className="col-act">
                     {rej.id === a.id ? (
                       <div className="row" style={{ justifyContent: 'flex-end' }}>
-                        <input autoFocus placeholder="Reason for returning…" value={rej.reason} onChange={e => setRej({ ...rej, reason: e.target.value })} style={{ width: 200 }} />
+                        <input autoFocus placeholder="Reason…" value={rej.reason} onChange={e => setRej({ ...rej, reason: e.target.value })} style={{ width: 150 }} />
                         <button className="danger small" disabled={!rej.reason.trim()} onClick={() => returnDoc(a)}>Confirm</button>
                         <button className="secondary small" onClick={() => setRej({ id: null, reason: '' })}>Cancel</button>
                       </div>
