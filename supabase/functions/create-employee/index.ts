@@ -48,10 +48,10 @@ Deno.serve(async (req) => {
       await admin.from('employee_job_roles').insert(
         b.roles.map((r: string) => ({ employee_id: uid, job_role_id: r })))
     }
-    // vehicle inductions for the employee's store(s)
-    if (b.locations?.length) {
+    // vehicle inductions — only the vehicles the manager selected for this hire
+    if (b.vehicle_ids?.length) {
       const { data: vehs } = await admin.from('vehicles').select('id, induction_document_id')
-        .in('location_id', b.locations).eq('active', true).not('induction_document_id', 'is', null)
+        .in('id', b.vehicle_ids).not('induction_document_id', 'is', null)
       if (vehs?.length) {
         await admin.from('assignments').insert(vehs.map((v) => ({ employee_id: uid, document_id: v.induction_document_id, vehicle_id: v.id, source: 'manual', assigned_by: user.id })))
       }

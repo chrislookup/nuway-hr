@@ -13,6 +13,7 @@ export default function StoreSettings({ profile }) {
   const [edit, setEdit] = useState(null)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [indMap, setIndMap] = useState({})
 
   async function load() {
     const { data: l } = await supabase.from('locations').select('*').eq('active', true).order('name')
@@ -21,6 +22,9 @@ export default function StoreSettings({ profile }) {
     setVehicles(v || [])
     const { data: d } = await supabase.from('documents').select('id, code, title').eq('active', true).order('code')
     setDocs(d || [])
+    const { data: inds } = await supabase.from('documents').select('id, code').in('code', ['11.3F', '11.3L', '11.4T'])
+    const m = {}; for (const x of inds || []) { if (x.code === '11.3F') m.Forklift = x.id; if (x.code === '11.3L') m.Loader = x.id; if (x.code === '11.4T') m.Truck = x.id }
+    setIndMap(m)
     if (!isAdmin) {
       const { data: m } = await supabase.from('manager_location_access').select('location_id').eq('manager_id', profile.id)
       setMyLocs((m || []).map(x => x.location_id))
@@ -35,24 +39,12 @@ export default function StoreSettings({ profile }) {
     if (!nv.rego.trim() || !nv.location_id) { setMsg('Enter a rego and choose a store.'); return }
     setBusy(true); setMsg('')
     try {
-      const { data: v, error } = await supabase.from('vehicles').insert({
+      const { error } = await supabase.from('vehicles').insert({
         type: nv.type, rego: nv.rego.trim(), name: nv.name.trim() || `${nv.type} ${nv.rego.trim()}`,
-        location_id: nv.location_id, induction_document_id: nv.induction_document_id || null, active: true,
-      }).select('*').single()
+        location_id: nv.location_id, induction_document_id: indMap[nv.type] || null, active: true,
+      })
       if (error) throw error
-      let assigned = 0
-      if (nv.induction_document_id) {
-        const { data: els } = await supabase.from('employee_locations').select('employee_id').eq('location_id', nv.location_id)
-        const empIds = [...new Set((els || []).map(e => e.employee_id))]
-        if (empIds.length) {
-          const { data: profs } = await supabase.from('profiles').select('id').in('id', empIds).eq('status', 'active')
-          const ids = (profs || []).map(p => p.id)
-          const due = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
-          if (ids.length) await supabase.from('assignments').insert(ids.map(id => ({ employee_id: id, document_id: nv.induction_document_id, vehicle_id: v.id, source: 'manual', assigned_by: profile.id, due_date: due })))
-          assigned = ids.length
-        }
-      }
-      setMsg(`${nv.type} ${nv.rego} added${nv.induction_document_id ? ` — induction assigned to ${assigned} staff at this store` : ''}.`)
+      setMsg(`${nv.type} ${nv.rego} added. Assign its induction to specific staff from their profile (Team → person → Vehicle inductions).`)
       setNv({ type: 'Forklift', rego: '', name: '', location_id: '', induction_document_id: '' }); load()
     } catch (e) { setMsg(e.message || String(e)) }
     setBusy(false)
@@ -66,6 +58,19 @@ export default function StoreSettings({ profile }) {
     if (error) { setMsg(/foreign key|violates/i.test(error.message) ? 'This vehicle has inductions assigned to staff — set it Inactive instead of deleting.' : error.message); return }
     setMsg(''); load()
   }
+  async function uploadRA(v, file) {
+    if (!file) return
+    setBusy(true); setMsg('')
+    const path = `vehicle-ra/${v.id}.pdf`
+    const { error } = await supabase.storage.from('masters').upload(path, file, { upsert: true, contentType: 'application/pdf' })
+    if (error) { setMsg('Risk assessment upload failed: ' + error.message); setBusy(false); return }
+    await supabase.from('vehicles').update({ risk_assessment_path: path }).eq('id', v.id)
+    setMsg(`Risk assessment uploaded for ${v.rego}.`); setBusy(false); load()
+  }
+  async function viewRA(v) {
+    const { data } = await supabase.storage.from('masters').createSignedUrl(v.risk_assessment_path, 3600)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
   function startEdit(v) {
     setEdit({ id: v.id, type: v.type || 'Truck', rego: v.rego || '', name: v.name || '', location_id: v.location_id || '', induction_document_id: v.induction_document_id || '' })
   }
@@ -73,7 +78,7 @@ export default function StoreSettings({ profile }) {
     if (!edit.rego.trim() || !edit.location_id) { setMsg('Enter a rego and choose a store.'); return }
     const { error } = await supabase.from('vehicles').update({
       type: edit.type, rego: edit.rego.trim(), name: edit.name.trim() || `${edit.type} ${edit.rego.trim()}`,
-      location_id: edit.location_id, induction_document_id: edit.induction_document_id || null,
+      location_id: edit.location_id, induction_document_id: indMap[edit.type] || edit.induction_document_id || null,
     }).eq('id', edit.id)
     if (error) { setMsg(error.message); return }
     setEdit(null); setMsg('Saved.'); load()
@@ -85,7 +90,7 @@ export default function StoreSettings({ profile }) {
   return (
     <div>
       <h1>Store settings — vehicles</h1>
-      <p className="muted">Register the trucks, forklifts and loaders at each store. Attaching an induction assigns it to everyone at that store.</p>
+      <p className="muted">Register the trucks, forklifts and loaders at each store, and upload each vehicle’s risk assessment. The right induction form is attached automatically by type. Inductions are then assigned to specific staff from their profile.</p>
 
       <div className="card">
         <h2>Add a vehicle</h2>
@@ -102,11 +107,6 @@ export default function StoreSettings({ profile }) {
               <option value="">— select —</option>
               {allowedLocs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select></div>
-          <div style={{ flex: 2, minWidth: 220 }}><label>Induction document (assigned to staff at this store)</label>
-            <select value={nv.induction_document_id} onChange={e => setNv({ ...nv, induction_document_id: e.target.value })}>
-              <option value="">— none —</option>
-              {docs.map(d => <option key={d.id} value={d.id}>{d.code} {d.title}</option>)}
-            </select></div>
         </div>
         <button style={{ marginTop: 10 }} onClick={addVehicle} disabled={busy}>{busy ? 'Adding…' : 'Add vehicle'}</button>
       </div>
@@ -115,7 +115,7 @@ export default function StoreSettings({ profile }) {
         <div key={loc} className="card">
           <h2>{loc}</h2>
           <table>
-            <thead><tr><th>Type</th><th>Rego</th><th>Name</th><th>Induction</th><th /></tr></thead>
+            <thead><tr><th>Type</th><th>Rego</th><th>Name</th><th>Induction</th><th>Risk assessment</th><th /></tr></thead>
             <tbody>
               {list.map(v => (edit && edit.id === v.id ? (
                 <tr key={v.id}>
@@ -126,11 +126,8 @@ export default function StoreSettings({ profile }) {
                     <select value={edit.location_id} onChange={e => setEdit({ ...edit, location_id: e.target.value })}>
                       {allowedLocs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
-                    <select style={{ marginTop: 4 }} value={edit.induction_document_id} onChange={e => setEdit({ ...edit, induction_document_id: e.target.value })}>
-                      <option value="">— no induction —</option>
-                      {docs.map(d => <option key={d.id} value={d.id}>{d.code} {d.title}</option>)}
-                    </select>
                   </td>
+                  <td className="muted">—</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small" onClick={saveEdit}>Save</button> <button className="small secondary" onClick={() => setEdit(null)}>Cancel</button></td>
                 </tr>
               ) : (
@@ -139,6 +136,13 @@ export default function StoreSettings({ profile }) {
                   <td><b>{v.rego}</b></td>
                   <td className="muted">{v.name}</td>
                   <td className="muted">{(() => { const d = docs.find(x => x.id === v.induction_document_id); return d ? `${d.code} ${d.title}` : '—' })()}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {v.risk_assessment_path && <button className="small secondary" onClick={() => viewRA(v)}>View</button>}{' '}
+                    <label className="small secondary" style={{ display: 'inline-block', cursor: 'pointer', padding: '4px 10px', border: '1px solid #d9dede', borderRadius: 7, background: '#eef1f1' }}>
+                      {v.risk_assessment_path ? 'Replace' : 'Upload RA'}
+                      <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => uploadRA(v, e.target.files?.[0])} />
+                    </label>
+                  </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small secondary" onClick={() => startEdit(v)}>Edit</button> <button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
                 </tr>
               )))}

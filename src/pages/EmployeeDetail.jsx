@@ -8,6 +8,8 @@ export default function EmployeeDetail({ profile }) {
   const { id } = useParams()
   const [emp, setEmp] = useState(null)
   const [assignments, setAssignments] = useState([])
+  const [storeVehicles, setStoreVehicles] = useState([])
+  const [addVeh, setAddVeh] = useState('')
   const [licences, setLicences] = useState([])
   const [docs, setDocs] = useState([])
   const [licTypes, setLicTypes] = useState([])
@@ -23,8 +25,10 @@ export default function EmployeeDetail({ profile }) {
   async function load() {
     await loadCatOrder()
     const { data: e } = await supabase.from('profiles')
-      .select('*, employee_locations(locations(name)), employee_job_roles(job_roles(name))').eq('id', id).single()
+      .select('*, employee_locations(location_id, locations(name)), employee_job_roles(job_roles(name))').eq('id', id).single()
     setEmp(e)
+    const locIds = [...new Set((e?.employee_locations || []).map(x => x.location_id).filter(Boolean))]
+    if (locIds.length) { const { data: vs } = await supabase.from('vehicles').select('id, rego, type, induction_document_id, location_id').in('location_id', locIds).eq('active', true).order('rego'); setStoreVehicles(vs || []) } else setStoreVehicles([])
     const { data: a } = await supabase.from('assignments')
       .select('*, documents(code, title, document_categories(name)), completions(document_versions(version_no)), vehicles(rego))')
       .eq('employee_id', id).order('due_date', { nullsFirst: false })
@@ -39,6 +43,21 @@ export default function EmployeeDetail({ profile }) {
   }
   useEffect(() => { load() }, [id])
 
+  async function addVehicleInduction() {
+    const v = storeVehicles.find(x => x.id === addVeh)
+    if (!v) return
+    if (!v.induction_document_id) { setMsg('That vehicle has no induction form attached (set its type in Store settings).'); return }
+    const due = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+    const { error } = await supabase.from('assignments').insert({ employee_id: id, document_id: v.induction_document_id, vehicle_id: v.id, source: 'manual', assigned_by: profile.id, due_date: due })
+    if (error) { setMsg(error.message); return }
+    setMsg(`Induction added for ${v.type} ${v.rego}.`); setAddVeh(''); load()
+  }
+  async function removeVehicleInduction(a) {
+    if (!window.confirm(`Remove the vehicle induction for ${a.vehicles?.rego || 'this vehicle'}?`)) return
+    const { error } = await supabase.from('assignments').delete().eq('id', a.id)
+    if (error) { setMsg(error.message); return }
+    load()
+  }
   async function assign() {
     if (!addDoc) return
     const { error } = await supabase.from('assignments').insert({
@@ -112,7 +131,8 @@ export default function EmployeeDetail({ profile }) {
   if (!emp) return <p className="muted">Loading…</p>
   const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
-  for (const a of assignments) { (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
+  const vehInd = assignments.filter(a => a.vehicle_id)
+  for (const a of assignments) { if (a.vehicle_id) continue; (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
   const current = [], superseded = []
   for (const list of Object.values(byDoc)) {
     list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at))
@@ -178,6 +198,35 @@ export default function EmployeeDetail({ profile }) {
           </div>
         ))}
         {current.length === 0 && <p className="muted">No assignments yet.</p>}
+      </div>
+
+      <div className="card">
+        <div className="row between">
+          <h2>Vehicle inductions</h2>
+          <div className="row">
+            <select value={addVeh} onChange={e => setAddVeh(e.target.value)} style={{ width: 300 }}>
+              <option value="">+ Require induction on a vehicle…</option>
+              {storeVehicles.filter(v => !vehInd.some(a => a.vehicle_id === v.id)).map(v => <option key={v.id} value={v.id}>{v.type} {v.rego}</option>)}
+            </select>
+            <button className="small" onClick={addVehicleInduction} disabled={!addVeh}>Add</button>
+          </div>
+        </div>
+        <p className="muted" style={{ fontSize: 12 }}>Pick which vehicles at this person's store(s) they must be inducted on. Each includes the vehicle's risk assessment (read &amp; sign) and the machine induction form.</p>
+        {vehInd.length === 0
+          ? <p className="muted">No vehicle inductions assigned.</p>
+          : <table className="matrix"><tbody>
+              {vehInd.map(a => (
+                <tr key={a.id}>
+                  <td><b>{a.vehicles?.rego || '—'}</b> <span className="muted">{a.documents?.code} {a.documents?.title}</span>{ver(a) ? ' · v' + ver(a) : ''}</td>
+                  <td className="muted col-due">due {fmtDate(a.due_date)}</td>
+                  <td className="col-status"><StatusBadge assignment={a} /></td>
+                  <td className="col-act">
+                    {['completed', 'awaiting_review'].includes(a.status) && <Link to={`/record/${a.id}`}>View / print</Link>}{' '}
+                    <button className="small" style={{ color: '#b00020' }} onClick={() => removeVehicleInduction(a)}>Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody></table>}
       </div>
 
       {superseded.length > 0 && (

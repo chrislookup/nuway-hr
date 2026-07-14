@@ -7,16 +7,23 @@ export default function NewHire({ profile }) {
   const [f, setF] = useState({
     first_name: '', last_name: '', email: '', mobile: '', employment_type: 'casual',
     date_of_birth: '', start_date: new Date().toISOString().slice(0, 10),
-    commencement_approved_by: '', locations: [], roles: [],
+    commencement_approved_by: '', locations: [], roles: [], vehicle_ids: [],
   })
   const [err, setErr] = useState('')
   const [ok, setOk] = useState('')
   const [busy, setBusy] = useState(false)
+  const [vehicles, setVehicles] = useState([])
 
   useEffect(() => {
     supabase.from('locations').select('*').eq('active', true).order('name').then(({ data }) => setLocations(data || []))
     supabase.from('job_roles').select('*').eq('active', true).order('name').then(({ data }) => setRoles(data || []))
   }, [])
+
+  useEffect(() => {
+    if (!f.locations.length) { setVehicles([]); return }
+    supabase.from('vehicles').select('id, rego, type, location_id, locations(name)').in('location_id', f.locations).eq('active', true).order('rego')
+      .then(({ data }) => setVehicles(data || []))
+  }, [f.locations])
 
   function toggle(key, id) {
     const cur = f[key]
@@ -65,6 +72,12 @@ export default function NewHire({ profile }) {
         <div className="checkgrid">
           {locations.map(l => <label key={l.id}><input type="checkbox" checked={f.locations.includes(l.id)} onChange={() => toggle('locations', l.id)} />{l.name}</label>)}
         </div>
+        {vehicles.length > 0 && (<>
+          <label>Vehicle inductions <span className="muted" style={{ fontWeight: 400 }}>(tick the vehicles this person must be inducted on)</span></label>
+          <div className="checkgrid">
+            {vehicles.map(v => <label key={v.id}><input type="checkbox" checked={f.vehicle_ids.includes(v.id)} onChange={() => toggle('vehicle_ids', v.id)} />{v.type} {v.rego} · {v.locations?.name}</label>)}
+          </div>
+        </>)}
         <label>Commencement approved by</label>
         <select value={f.commencement_approved_by} onChange={e => setF({ ...f, commencement_approved_by: e.target.value })}>
           <option value="">— select —</option>

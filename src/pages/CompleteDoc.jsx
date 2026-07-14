@@ -25,6 +25,8 @@ export default function CompleteDoc({ profile }) {
   const [cpName, setCpName] = useState('')
   const [draftMsg, setDraftMsg] = useState('')
   const [opened, setOpened] = useState(false)
+  const [raUrl, setRaUrl] = useState(null)
+  const [raAck, setRaAck] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -34,6 +36,10 @@ export default function CompleteDoc({ profile }) {
       setA(asg)
       if (!asg) return
       try { const d = JSON.parse(localStorage.getItem(`nuwayhr_draft_${asg.id}`) || 'null'); if (d) { setPdfVals(d.pdfVals || {}); setSignedName(d.signedName || ''); setAgree(!!d.agree); setCpName(d.cpName || '') } } catch (e) { /* ignore */ }
+      if (asg.vehicle_id) {
+        const { data: veh } = await supabase.from('vehicles').select('rego, risk_assessment_path').eq('id', asg.vehicle_id).single()
+        if (veh?.risk_assessment_path) { const { data: rs } = await supabase.storage.from('masters').createSignedUrl(veh.risk_assessment_path, 3600); setRaUrl(rs?.signedUrl || null) }
+      }
       const vid = asg.documents.current_version_id
       if (vid) {
         const { data: v } = await supabase.from('document_versions').select('*').eq('id', vid).single()
@@ -146,6 +152,7 @@ export default function CompleteDoc({ profile }) {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
     if (needsRead && !opened) { setErr('Please open and read the document first (use the “Open full screen” button).'); return }
+    if (raUrl && !raAck) { setErr('Please read and tick to acknowledge the vehicle risk assessment.'); return }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
     const showAgree = needsSig && !guided && !isPdfForm && !isStandard
     if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
@@ -193,7 +200,7 @@ export default function CompleteDoc({ profile }) {
       const { data: comp, error: ce } = await supabase.from('completions').insert({
         assignment_id: a.id,
         document_version_id: version?.id,
-        form_data: { ...cleanValues, uploaded_file: uploadedPath, ack: ackList.length ? ackList : null },
+        form_data: { ...cleanValues, uploaded_file: uploadedPath, ack: ackList.length ? ackList : null, ra_ack: raUrl ? true : null },
         signature_path, signed_name: signedName || null,
         signed_at: needsSig ? new Date().toISOString() : null,
         verifier_name: firstName, verifier_signature_path: firstPath,
@@ -275,6 +282,18 @@ export default function CompleteDoc({ profile }) {
         )}
         {!version?.media_url && !pdfUrl && !version?.form_schema && !isUpload && (
           <p className="muted">Content for this document hasn't been uploaded yet. You can still read the printed copy and sign below — or check back later.</p>
+        )}
+        {raUrl && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="row between" style={{ alignItems: 'center', marginBottom: 8 }}>
+              <b style={{ fontSize: 15 }}>⚠️ Vehicle risk assessment — read &amp; acknowledge</b>
+              <a href={raUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}><button type="button" className="small secondary">Open full screen ↗</button></a>
+            </div>
+            <iframe title="risk assessment" src={raUrl} style={{ width: '100%', height: 500, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, marginTop: 8 }}>
+              <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={raAck} onChange={e => setRaAck(e.target.checked)} /> I have read and understood the risk assessment for this vehicle.
+            </label>
+          </div>
         )}
         {version?.form_schema && <FormRenderer schema={version.form_schema} values={values} onChange={setValues} />}
         {isUpload && (<><label>Upload file (photo or PDF)</label>
