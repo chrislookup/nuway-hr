@@ -24,7 +24,7 @@ export default function CompleteDoc({ profile }) {
   const [acks, setAcks] = useState({})
   const [cpName, setCpName] = useState('')
   const [draftMsg, setDraftMsg] = useState('')
-  const [, setOpened] = useState(false)
+  const [opened, setOpened] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -63,6 +63,7 @@ export default function CompleteDoc({ profile }) {
   const masterIsPdf = /\.pdf(\?|$)/i.test(masterPath)
   const masterIsImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(masterPath)
   const masterName = masterPath ? masterPath.split('/').pop() : 'document'
+  const needsRead = !!pdfUrl && !isPdfForm
   const ackList = test?.ack_statements || []
   const hasQuiz = (test?.questions || []).length > 0
   const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
@@ -144,6 +145,7 @@ export default function CompleteDoc({ profile }) {
   async function submit() {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
+    if (needsRead && !opened) { setErr('Please open and read the document first (use the “Open full screen” button).'); return }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
     const showAgree = needsSig && !guided && !isPdfForm && !isStandard
     if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
@@ -250,9 +252,9 @@ export default function CompleteDoc({ profile }) {
               <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}><button type="button" className="small secondary">Open full screen ↗</button></a>
             </div>
             {masterIsPdf
-              ? <iframe title="document" src={pdfUrl} onLoad={() => setOpened(true)} style={{ width: '100%', height: 620, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
+              ? <iframe title="document" src={pdfUrl} style={{ width: '100%', height: 620, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
               : masterIsImg
-                ? <img src={pdfUrl} alt="document" onLoad={() => setOpened(true)} style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8 }} />
+                ? <img src={pdfUrl} alt="document" style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8 }} />
                 : <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)} style={{ textDecoration: 'none' }}>
                     <div className="card" style={{ borderColor: 'var(--teal)', background: '#f0fafb', textAlign: 'center', margin: 0 }}>
                       <div style={{ fontSize: 30 }}>📄</div>
@@ -329,9 +331,10 @@ export default function CompleteDoc({ profile }) {
             </div>
           )}
           {draftMsg && <div className="success" style={{ marginTop: 10 }}>{draftMsg}</div>}
+          {needsRead && !opened && <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>🔒 Open the document above (the “Open full screen” button) before you can sign.</div>}
           {err && <div className="error">{err}</div>}
           <div className="row" style={{ marginTop: 14 }}>
-            <button onClick={isPdfForm ? submitPdf : submit} disabled={busy}>
+            <button onClick={isPdfForm ? submitPdf : submit} disabled={busy || (needsRead && !opened)}>
               {busy ? 'Submitting…' : doc.requires_manager_signoff ? 'Submit for manager sign-off' : 'Submit'}
             </button>
             {isPdfForm && <button className="secondary" onClick={saveDraft} disabled={busy}>Save draft</button>}
