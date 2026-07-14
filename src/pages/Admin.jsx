@@ -32,6 +32,7 @@ function Documents({ profile }) {
   const [file, setFile] = useState(null)
   const [pdfFields, setPdfFields] = useState([])
   const [pdfEditUrl, setPdfEditUrl] = useState('')
+  const [pdfEditorOpen, setPdfEditorOpen] = useState(true)
   const [mediaUrl, setMediaUrl] = useState('')
   const [pages, setPages] = useState([])
   const [test, setTest] = useState(null)
@@ -66,15 +67,15 @@ function Documents({ profile }) {
     setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setSaveAsk(false); setChangeNote(''); setReassign(false)
     if (d?.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
-      setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || []); setPdfFields(v?.pdf_field_map || [])
+      setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || []); setPdfFields(v?.pdf_field_map || []); setPdfEditorOpen(!((v?.pdf_field_map || []).length))
       const { data: tst } = await supabase.from('tests').select('*').eq('document_version_id', d.current_version_id).maybeSingle()
       setTest(tst || null)
       const { data: vs } = await supabase.from('document_versions').select('*').eq('document_id', d.id).order('version_no', { ascending: false })
       setVersions(vs || [])
-    } else { setVersions([]); setPdfFields([]) }
+    } else { setVersions([]); setPdfFields([]); setPdfEditorOpen(true) }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([])
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([]); setPdfEditorOpen(true)
     setEdit({ code: '', title: '', doc_type: 'media', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -249,10 +250,15 @@ function Documents({ profile }) {
 
           {edit.doc_type === 'pdf_form' && (
             <div style={{ marginTop: 14 }}>
-              <label>PDF fields — drop signature / date / text onto the form and tag who fills each</label>
-              {pdfEditUrl
-                ? <Suspense fallback={<p className="muted">Loading field tool…</p>}><PdfFieldEditor pdfUrl={pdfEditUrl} value={pdfFields} onChange={setPdfFields} /></Suspense>
-                : <p className="muted">Upload a PDF master above (then Save), and the form appears here to place fields on.</p>}
+              <div className="row between" style={{ alignItems: 'center' }}>
+                <label style={{ margin: 0 }}>PDF fields — drop signature / date / text onto the form and tag who fills each{pdfFields.length ? ` · ${pdfFields.length} placed` : ''}</label>
+                {pdfEditUrl && <button type="button" className="small secondary" onClick={() => setPdfEditorOpen(o => !o)}>{pdfEditorOpen ? 'Hide form' : 'Show / edit fields'}</button>}
+              </div>
+              {!pdfEditUrl
+                ? <p className="muted">Upload a PDF master above (then Save), and the form appears here to place fields on.</p>
+                : pdfEditorOpen
+                  ? <Suspense fallback={<p className="muted">Loading field tool…</p>}><PdfFieldEditor pdfUrl={pdfEditUrl} value={pdfFields} onChange={setPdfFields} /></Suspense>
+                  : <p className="muted" style={{ marginTop: 6 }}>{pdfFields.length} field{pdfFields.length === 1 ? '' : 's'} placed. Form hidden to keep things fast — click “Show / edit fields” to view or change them.</p>}
             </div>
           )}
 
