@@ -63,7 +63,7 @@ export default function CompleteDoc({ profile }) {
   const masterIsPdf = /\.pdf(\?|$)/i.test(masterPath)
   const masterIsImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(masterPath)
   const masterName = masterPath ? masterPath.split('/').pop() : 'document'
-  const needsRead = !!pdfUrl && !isPdfForm
+  const needsRead = !!pdfUrl && doc.doc_type !== 'pdf_form'
   const ackList = test?.ack_statements || []
   const hasQuiz = (test?.questions || []).length > 0
   const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
