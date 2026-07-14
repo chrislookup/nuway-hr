@@ -131,7 +131,9 @@ export default function EmployeeDetail({ profile }) {
   if (!emp) return <p className="muted">Loading…</p>
   const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
-  const vehInd = assignments.filter(a => a.vehicle_id)
+  const vehByVeh = {}
+  for (const a of assignments) { if (a.vehicle_id) { (vehByVeh[a.vehicle_id] = vehByVeh[a.vehicle_id] || []).push(a) } }
+  const vehInd = Object.values(vehByVeh).map(list => { list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at)); return list[0] })
   for (const a of assignments) { if (a.vehicle_id) continue; (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
   const current = [], superseded = []
   for (const list of Object.values(byDoc)) {

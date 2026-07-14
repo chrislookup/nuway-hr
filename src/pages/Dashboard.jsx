@@ -46,7 +46,10 @@ export default function Dashboard({ profile }) {
 
   const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
-  for (const a of assignments) { (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
+  const vehByVeh = {}
+  for (const a of assignments) { if (a.vehicle_id) { (vehByVeh[a.vehicle_id] = vehByVeh[a.vehicle_id] || []).push(a) } }
+  const vehInd = Object.values(vehByVeh).map(list => { list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at)); return list[0] })
+  for (const a of assignments) { if (a.vehicle_id) continue; (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
   const current = [], superseded = []
   for (const list of Object.values(byDoc)) { list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at)); current.push(list[0]); superseded.push(...list.slice(1)) }
   const done = current.filter(a => a.status === 'completed').length
@@ -139,6 +142,25 @@ export default function Dashboard({ profile }) {
           </tbody></table>
         )}
       </div>
+
+      {vehInd.length > 0 && (
+        <div className="card">
+          <h2>Vehicle inductions ({vehInd.length})</h2>
+          <p className="muted" style={{ fontSize: 13 }}>One induction per machine you're assigned to — each includes the vehicle's risk assessment and induction form.</p>
+          <table className="listgrouped"><tbody>
+            {vehInd.map(a => (
+              <tr key={a.id}>
+                <td><b>{a.vehicles?.rego || '—'}</b> <span className="muted">{a.documents?.code} {a.documents?.title}</span></td>
+                <td className="muted col-due">due {fmtDate(a.due_date)}</td>
+                <td className="col-status"><StatusBadge assignment={a} /></td>
+                <td className="col-act">{['completed', 'awaiting_review'].includes(a.status)
+                  ? <Link to={`/record/${a.id}`}>View / print</Link>
+                  : <Link to={`/doc/${a.id}`}><button className="small">Open</button></Link>}</td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
 
       {done > 0 && (
         <div className="card">
