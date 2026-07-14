@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
 const PdfFieldEditor = lazy(() => import('../components/PdfFieldEditor'))
+import ConditionsBuilder from '../components/ConditionsBuilder'
 import { supabase, CAPABILITIES, fmtDate, catRank } from '../lib/supabase'
 
 const TABS = ['Documents', 'Packs', 'People', 'Organisation']
@@ -260,10 +261,8 @@ function Documents({ profile }) {
             <QuestionBuilder test={test} onChange={setTest} />
           </div>
 
-          <label style={{ marginTop: 10 }}>Conditions (JSON — e.g. {'{'}"employment_type":["casual"]{'}'} or {'{'}"locations":["Logan"]{'}'})</label>
-          <input value={edit.conditions ? JSON.stringify(edit.conditions) : ''} onChange={e => {
-            try { setEdit({ ...edit, conditions: e.target.value ? JSON.parse(e.target.value) : null }) } catch { /* typing */ }
-          }} placeholder="blank = applies to everyone" />
+          <label style={{ marginTop: 10 }}>Who does this apply to? <span className="muted" style={{ fontWeight: 400 }}>(auto-assigned to new hires who match)</span></label>
+          <ConditionsBuilder value={edit.conditions} onChange={c => setEdit({ ...edit, conditions: c })} />
 
           {edit.id && versions.length > 0 && (
             <div className="fb-section" style={{ marginTop: 14 }}>
