@@ -24,6 +24,7 @@ export default function CompleteDoc({ profile }) {
   const [acks, setAcks] = useState({})
   const [cpName, setCpName] = useState('')
   const [draftMsg, setDraftMsg] = useState('')
+  const [, setOpened] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -58,6 +59,10 @@ export default function CompleteDoc({ profile }) {
 
   const guided = !!version?.form_schema?.pages
   const isStandard = doc.doc_type === 'standard'
+  const masterPath = version?.pdf_path || ''
+  const masterIsPdf = /\.pdf(\?|$)/i.test(masterPath)
+  const masterIsImg = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(masterPath)
+  const masterName = masterPath ? masterPath.split('/').pop() : 'document'
   const ackList = test?.ack_statements || []
   const hasQuiz = (test?.questions || []).length > 0
   const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
@@ -238,7 +243,28 @@ export default function CompleteDoc({ profile }) {
             ? <video src={version.media_url} controls />
             : <p><a href={version.media_url} target="_blank" rel="noreferrer">Open training material ↗</a></p>
         )}
-        {pdfUrl && <p><a href={pdfUrl} target="_blank" rel="noreferrer">Open document (PDF) ↗</a></p>}
+        {pdfUrl && !isPdfForm && (
+          <div style={{ marginBottom: 4 }}>
+            <div className="row between" style={{ alignItems: 'center', marginBottom: 8 }}>
+              <b style={{ fontSize: 15 }}>📄 Read this document</b>
+              <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}><button type="button" className="small secondary">Open full screen ↗</button></a>
+            </div>
+            {masterIsPdf
+              ? <iframe title="document" src={pdfUrl} onLoad={() => setOpened(true)} style={{ width: '100%', height: 620, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
+              : masterIsImg
+                ? <img src={pdfUrl} alt="document" onLoad={() => setOpened(true)} style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8 }} />
+                : <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)} style={{ textDecoration: 'none' }}>
+                    <div className="card" style={{ borderColor: 'var(--teal)', background: '#f0fafb', textAlign: 'center', margin: 0 }}>
+                      <div style={{ fontSize: 30 }}>📄</div>
+                      <b>Open and read this document</b>
+                      <p className="muted" style={{ margin: '4px 0 10px' }}>{masterName}</p>
+                      <button type="button">Open document ↗</button>
+                    </div>
+                  </a>}
+            <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>Please read the full document above before confirming and signing below.</p>
+          </div>
+        )}
+        {pdfUrl && isPdfForm && <p><a href={pdfUrl} target="_blank" rel="noreferrer">Open document (PDF) ↗</a></p>}
         {isPdfForm && mine && !['completed'].includes(a.status) && (
           <Suspense fallback={<p className="muted">Loading form…</p>}>
             <p className="muted" style={{ fontSize: 13 }}>Fill your fields on the form below.{compFields.length ? ' The blue fields are yours; the green fields are for the competent person to complete and sign with you before you submit.' : ''}</p>
