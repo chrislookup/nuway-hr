@@ -30,7 +30,7 @@ export default function EmployeeDetail({ profile }) {
     const locIds = [...new Set((e?.employee_locations || []).map(x => x.location_id).filter(Boolean))]
     if (locIds.length) { const { data: vs } = await supabase.from('vehicles').select('id, rego, type, induction_document_id, location_id').in('location_id', locIds).eq('active', true).order('rego'); setStoreVehicles(vs || []) } else setStoreVehicles([])
     const { data: a } = await supabase.from('assignments')
-      .select('*, documents(code, title, document_categories(name)), completions(document_versions(version_no)), vehicles(rego))')
+      .select('*, documents(code, title, document_categories(name)), completions(document_versions(version_no)), vehicles(rego, name))')
       .eq('employee_id', id).order('due_date', { nullsFirst: false })
     setAssignments(a || [])
 
@@ -219,7 +219,7 @@ export default function EmployeeDetail({ profile }) {
           : <table className="matrix"><tbody>
               {vehInd.map(a => (
                 <tr key={a.id}>
-                  <td><b>{a.vehicles?.rego || '—'}</b> <span className="muted">{a.documents?.code} {a.documents?.title}</span>{ver(a) ? ' · v' + ver(a) : ''}</td>
+                  <td><b>{a.vehicles?.rego || '—'}</b> {a.vehicles?.name || ''}<div style={{ fontSize: 12 }} className="muted">{a.documents?.code} {a.documents?.title}{ver(a) ? ' · v' + ver(a) : ''}</div></td>
                   <td className="muted col-due">due {fmtDate(a.due_date)}</td>
                   <td className="col-status"><StatusBadge assignment={a} /></td>
                   <td className="col-act">

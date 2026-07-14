@@ -30,7 +30,7 @@ export default function Dashboard({ profile }) {
   useEffect(() => {
     loadCatOrder().then(() => setCatReady(x => x + 1))
     supabase.from('assignments')
-      .select('*, documents(id, code, title, doc_type, requires_signature, category_id, document_categories(name)), completions(document_versions(version_no)), vehicles(rego))')
+      .select('*, documents(id, code, title, doc_type, requires_signature, category_id, document_categories(name)), completions(document_versions(version_no)), vehicles(rego, name))')
       .eq('employee_id', profile.id)
       .order('due_date', { ascending: true, nullsFirst: false })
       .then(({ data }) => setAssignments(data || []))
@@ -150,7 +150,7 @@ export default function Dashboard({ profile }) {
           <table className="listgrouped"><tbody>
             {vehInd.map(a => (
               <tr key={a.id}>
-                <td><b>{a.vehicles?.rego || '—'}</b> <span className="muted">{a.documents?.code} {a.documents?.title}</span></td>
+                <td><b>{a.vehicles?.rego || '—'}</b> {a.vehicles?.name || ''}<div style={{ fontSize: 12 }} className="muted">{a.documents?.code} {a.documents?.title}</div></td>
                 <td className="muted col-due">due {fmtDate(a.due_date)}</td>
                 <td className="col-status"><StatusBadge assignment={a} /></td>
                 <td className="col-act">{['completed', 'awaiting_review'].includes(a.status)
