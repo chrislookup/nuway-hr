@@ -72,7 +72,7 @@ export default function App() {
       <div className="app">
         <div className="sidebar">
           <div className="brand">
-            <img src={`${import.meta.env.BASE_URL}nuway-logo.png`} alt="Nuway Landscape Supplies" className="brand-logo" onError={e => { e.currentTarget.style.display = 'none' }} onLoad={e => { const t = e.currentTarget.parentElement.querySelector('.brand-text'); if (t) t.style.display = 'none' }} />
+            <img src={`${import.meta.env.BASE_URL}nuway-logo-white.png`} alt="Nuway Landscape Supplies" className="brand-logo" onError={e => { e.currentTarget.style.display = 'none' }} onLoad={e => { const t = e.currentTarget.parentElement.querySelector('.brand-text'); if (t) t.style.display = 'none' }} />
             <div className="brand-text">Nuway <span>HR</span></div>
           </div>
           <nav>
