@@ -37,8 +37,14 @@ export default function NewHire({ profile }) {
     if (!f.commencement_approved_by) { setErr('Commencement approval is required.'); return }
     setBusy(true)
     const { data, error } = await supabase.functions.invoke('create-employee', { body: f })
-    if (error || data?.error) setErr(data?.error || error.message || 'Failed — is the create-employee function deployed?')
-    else setOk(`${f.first_name} created — ${data.assigned} documents assigned. They'll get an invite email to set their password.`)
+    if (error || data?.error) { setErr(data?.error || error.message || 'Failed — is the create-employee function deployed?'); setBusy(false); return }
+    // Keep only the vehicle inductions the manager selected (trim any store vehicles auto-assigned)
+    if (data?.employee_id) {
+      const { data: vAsg } = await supabase.from('assignments').select('id, vehicle_id').eq('employee_id', data.employee_id).not('vehicle_id', 'is', null)
+      const toDelete = (vAsg || []).filter(a => !f.vehicle_ids.includes(a.vehicle_id)).map(a => a.id)
+      if (toDelete.length) await supabase.from('assignments').delete().in('id', toDelete)
+    }
+    setOk(`${f.first_name} created${f.vehicle_ids.length ? ` with ${f.vehicle_ids.length} vehicle induction(s)` : ''}. They'll get an invite email to set their password.`)
     setBusy(false)
   }
 
