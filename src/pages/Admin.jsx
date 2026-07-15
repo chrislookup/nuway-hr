@@ -43,6 +43,7 @@ function Documents({ profile }) {
   const [cats, setCats] = useState([])
   const [edit, setEdit] = useState(null)
   const [version, setVersion] = useState(null)
+  const [preview, setPreview] = useState(null)  // { url, kind }
   const [file, setFile] = useState(null)
   const [pdfFields, setPdfFields] = useState([])
   const [pdfEditUrl, setPdfEditUrl] = useState('')
@@ -77,6 +78,27 @@ function Documents({ profile }) {
     mk()
     return () => { if (revoke) URL.revokeObjectURL(revoke) }
   }, [edit?.doc_type, file, version?.pdf_path])
+
+  useEffect(() => {
+    let revoke
+    async function mk() {
+      const isImg = n => /\.(png|jpe?g|gif|webp)$/i.test(n || '')
+      const isPdf = n => /\.pdf$/i.test(n || '') || /pdf/i.test(n || '')
+      if (file) {
+        const u = URL.createObjectURL(file); revoke = u
+        setPreview({ url: u, kind: isImg(file.name) || (file.type || '').startsWith('image') ? 'image' : isPdf(file.type || file.name) ? 'pdf' : 'other', name: file.name })
+        return
+      }
+      if (version?.pdf_path) {
+        const { data } = await supabase.storage.from('masters').createSignedUrl(version.pdf_path, 3600)
+        setPreview(data?.signedUrl ? { url: data.signedUrl, kind: isImg(version.pdf_path) ? 'image' : 'pdf', name: version.pdf_path.split('/').pop() } : null)
+        return
+      }
+      setPreview(null)
+    }
+    mk()
+    return () => { if (revoke) URL.revokeObjectURL(revoke) }
+  }, [file, version?.pdf_path])
 
   async function openEdit(d) {
     setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setSaveAsk(false); setChangeNote(''); setReassign(false)
@@ -262,6 +284,18 @@ function Documents({ profile }) {
               <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} placeholder="https://nuway.com.au/…" />
             </div>
           </div>
+
+          {preview && (
+            <div className="fb-section" style={{ marginTop: 10 }}>
+              <div className="row between" style={{ alignItems: 'center' }}>
+                <label style={{ margin: 0 }}>Document preview{file ? ' (new file — save to keep)' : ''}</label>
+                <a href={preview.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Open full screen ↗</a>
+              </div>
+              {preview.kind === 'pdf' && <iframe title="preview" src={preview.url} style={{ width: '100%', height: 520, border: '1px solid var(--line)', borderRadius: 8, background: '#fff', marginTop: 6 }} />}
+              {preview.kind === 'image' && <img src={preview.url} alt="preview" style={{ maxWidth: '100%', border: '1px solid var(--line)', borderRadius: 8, marginTop: 6 }} />}
+              {preview.kind === 'other' && <p className="muted" style={{ marginTop: 6 }}>{preview.name} — can’t preview this file type here. Use “Open full screen”.</p>}
+            </div>
+          )}
 
           {edit.doc_type === 'web_form' && (
             <div style={{ marginTop: 14 }}>
