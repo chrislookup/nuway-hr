@@ -89,7 +89,7 @@ function Documents({ profile }) {
   }
   function newDoc() {
     setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([]); setPdfEditorOpen(true)
-    setEdit({ code: '', title: '', doc_type: 'standard', pre_employment: false, requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
+    setEdit({ code: '', title: '', doc_type: 'standard', pre_employment: false, requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, auto_assign: false, category_id: cats[0]?.id })
   }
   async function viewMaster() {
     if (!version?.pdf_path) return
@@ -120,6 +120,12 @@ function Documents({ profile }) {
       if (error) throw error
       setMsg(`Deleted “${d.code} ${d.title}”.`); load()
     } catch (e) { window.alert('Delete failed: ' + (e.message || e)) }
+  }
+
+  async function rolloutDoc(id, silent) {
+    const { data, error } = await supabase.rpc('rollout_document', { doc: id })
+    if (error) { if (!silent) setMsg('Roll-out failed: ' + error.message); return null }
+    return data || 0
   }
 
   async function saveInPlace() {
@@ -167,7 +173,9 @@ function Documents({ profile }) {
       }
     }
 
-    setMsg('Saved.'); setEdit(null); setFile(null); setVersion(null); setSaveAsk(false); setBusy(false); load()
+    let extra = ''
+    if (edit.auto_assign && docId) { const n = await rolloutDoc(docId, true); if (n != null) extra = ` Assigned to ${n} current staff member${n === 1 ? '' : 's'} (already-assigned staff skipped).` }
+    setMsg('Saved.' + extra); setEdit(null); setFile(null); setVersion(null); setSaveAsk(false); setBusy(false); load()
   }
 
   async function publishNewVersion() {
@@ -296,6 +304,19 @@ function Documents({ profile }) {
 
           <label style={{ marginTop: 10 }}>Who does this apply to? <span className="muted" style={{ fontWeight: 400 }}>(auto-assigned to new hires who match)</span></label>
           <ConditionsBuilder value={edit.conditions} onChange={c => setEdit({ ...edit, conditions: c })} />
+
+          <div className="fb-section" style={{ marginTop: 12 }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, margin: 0 }}>
+              <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={!!edit.auto_assign} onChange={e => setEdit({ ...edit, auto_assign: e.target.checked })} />
+              <span><b>Company-wide document</b> — assign to everyone who matches above, not only staff in a specific role pack. New hires get it automatically; tick this for policies everyone must sign (e.g. Fair Work, harassment).</span>
+            </label>
+            {edit.id && (
+              <div style={{ marginTop: 10 }}>
+                <button type="button" className="small secondary" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); const n = await rolloutDoc(edit.id, false); setBusy(false); if (n != null) setMsg(`Assigned to ${n} current staff member${n === 1 ? '' : 's'} (already-assigned staff skipped).`) }}>Roll out to current staff now</button>
+                <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Pushes this document to existing staff who match. Save any changes first.</span>
+              </div>
+            )}
+          </div>
 
           {edit.id && versions.length > 0 && (
             <div className="fb-section" style={{ marginTop: 14 }}>
