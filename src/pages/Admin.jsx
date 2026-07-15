@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
 import RichText from '../components/RichText'
+import SignaturePad from '../components/SignaturePad'
+import FormRenderer from '../components/FormRenderer'
+const PdfFieldFiller = lazy(() => import('../components/PdfFieldFiller'))
 const PdfFieldEditor = lazy(() => import('../components/PdfFieldEditor'))
 import ConditionsBuilder from '../components/ConditionsBuilder'
 import { supabase, CAPABILITIES, fmtDate, catRank, loadCatOrder } from '../lib/supabase'
@@ -44,6 +47,7 @@ function Documents({ profile }) {
   const [edit, setEdit] = useState(null)
   const [version, setVersion] = useState(null)
   const [preview, setPreview] = useState(null)  // { url, kind }
+  const [showPreview, setShowPreview] = useState(false)
   const [file, setFile] = useState(null)
   const [pdfFields, setPdfFields] = useState([])
   const [pdfEditUrl, setPdfEditUrl] = useState('')
@@ -383,7 +387,11 @@ function Documents({ profile }) {
             <div className="row" style={{ marginTop: 12 }}>
               <button onClick={() => (edit.id ? setSaveAsk(true) : saveInPlace())} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
               <button className="secondary" onClick={() => setEdit(null)}>Cancel</button>
+              <button type="button" className="secondary" onClick={() => setShowPreview(true)}>👁 Preview as employee</button>
             </div>
+          )}
+          {showPreview && (
+            <PreviewModal doc={edit} catName={cats.find(c => c.id === edit.category_id)?.name || 'Other'} preview={preview} mediaUrl={mediaUrl} pages={pages} pdfFields={pdfFields} test={test} onClose={() => setShowPreview(false)} />
           )}
         </div>
       )}
@@ -873,6 +881,102 @@ function TestAccounts() {
           {accts.length === 0 && <tr><td colSpan={4} className="muted">No test accounts yet.</td></tr>}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+
+function PreviewModal({ doc, catName, preview, mediaUrl, pages, pdfFields, test, onClose }) {
+  const [values, setValues] = useState({})
+  const [pdfVals, setPdfVals] = useState({})
+  const [answers, setAnswers] = useState({})
+  const [acks, setAcks] = useState({})
+  const [, setSig] = useState(null)
+  const [name, setName] = useState('')
+  const guided = doc.doc_type === 'web_form'
+  const isPdfForm = doc.doc_type === 'pdf_form'
+  const isUpload = doc.doc_type === 'upload'
+  const isStandard = doc.doc_type === 'standard'
+  const needsSig = !!doc.requires_signature
+  const schema = guided ? ((pages && pages.length) ? { type: 'guided', pages } : null) : null
+  const qs = (test?.questions || []).filter(q => q.q && (q.options || []).length >= 2)
+  const acksList = (test?.ack_statements || []).map(x => (x || '').trim()).filter(Boolean)
+  const compFields = (pdfFields || []).filter(f => f.role === 'competent')
+  const afterSign = [doc.requires_manager_signoff && 'manager', doc.requires_admin_signoff && 'admin', doc.requires_assessor_signoff && 'competent-person'].filter(Boolean)
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 2000, overflow: 'auto', padding: '24px 12px' }} onClick={onClose}>
+      <div style={{ maxWidth: 840, margin: '0 auto', background: '#f4f6f4', borderRadius: 12, padding: 20 }} onClick={e => e.stopPropagation()}>
+        <div className="row between" style={{ alignItems: 'center', marginBottom: 8 }}>
+          <span className="muted" style={{ fontSize: 12 }}>👁 Employee portal preview — nothing here is saved</span>
+          <button className="small secondary" onClick={onClose}>Close ✕</button>
+        </div>
+        <h1 style={{ marginTop: 0 }}>{doc.code} — {doc.title}</h1>
+        <p className="muted">{catName} · due (example date)</p>
+        {doc.instructions && <div className="ackbox" style={{ marginBottom: 14 }} dangerouslySetInnerHTML={{ __html: String(doc.instructions).replace(/<script[\s\S]*?<\/script>/gi, '') }} />}
+        <div className="doc-content">
+          {mediaUrl && (/\.(mp4|webm)(\?|$)/i.test(mediaUrl)
+            ? <video src={mediaUrl} controls style={{ maxWidth: '100%' }} />
+            : <p><a href={mediaUrl} target="_blank" rel="noreferrer">Open training material ↗</a></p>)}
+          {preview && !isPdfForm && (
+            <div style={{ marginBottom: 4 }}>
+              <b style={{ fontSize: 15 }}>📄 Read this document</b>
+              {preview.kind === 'pdf' && <iframe title="doc" src={preview.url} style={{ width: '100%', height: 560, border: '1px solid var(--line)', borderRadius: 8, background: '#fff', marginTop: 6 }} />}
+              {preview.kind === 'image' && <img src={preview.url} alt="doc" style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8, marginTop: 6 }} />}
+              {preview.kind === 'other' && <p className="muted">Attachment: {preview.name}</p>}
+              <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>Please read the full document above before confirming and signing below.</p>
+            </div>
+          )}
+          {isPdfForm && preview && (
+            <Suspense fallback={<p className="muted">Loading form…</p>}>
+              <PdfFieldFiller pdfUrl={preview.url} fields={pdfFields} roles={compFields.length ? ['employee', 'competent'] : ['employee']} values={pdfVals} onChange={setPdfVals} />
+            </Suspense>
+          )}
+          {isPdfForm && !preview && <p className="muted">Upload the PDF master to preview the fillable form.</p>}
+          {schema && <FormRenderer schema={schema} values={values} onChange={setValues} />}
+          {isUpload && (<>
+            <label>Upload evidence <span className="muted" style={{ fontWeight: 400 }}>(take photos or choose files — several allowed)</span></label>
+            <div className="row" style={{ gap: 8, marginTop: 4 }}>
+              <span className="btnfile">📷 Take photo</span><span className="btnfile">📎 Choose file(s)</span>
+            </div>
+          </>)}
+        </div>
+        {qs.length > 0 && (
+          <div className="card"><h2>Test — pass mark {Number(test?.pass_mark) || 80}%</h2>
+            {qs.map((q, i) => (
+              <div key={i} style={{ marginBottom: 12 }}><p><b>{i + 1}. {q.q}</b></p>
+                {(q.options || []).map(o => (
+                  <label key={o} style={{ display: 'flex', gap: 8, fontWeight: 400, margin: '4px 0' }}>
+                    <input type="radio" style={{ width: 'auto' }} name={'pq' + i} checked={answers[i] === o} onChange={() => setAnswers({ ...answers, [i]: o })} /> {o}
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        {acksList.length > 0 && (
+          <div className="card"><h2>Please confirm</h2>
+            {acksList.map((st, i) => (
+              <label key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, margin: '6px 0' }}>
+                <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={!!acks[i]} onChange={e => setAcks({ ...acks, [i]: e.target.checked })} /> {st}
+              </label>
+            ))}
+          </div>
+        )}
+        {needsSig && (
+          <div className="card"><h2>Sign &amp; acknowledge</h2>
+            {!guided && !isPdfForm && !isStandard && (
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400 }}>
+                <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} readOnly /> I confirm I have read and understood this document, and my electronic signature below is my agreement to comply with it.
+              </label>
+            )}
+            <label>Full name</label><input value={name} onChange={e => setName(e.target.value)} placeholder="Type your full legal name" />
+            {!isPdfForm && <><label>Signature</label><SignaturePad onChange={setSig} /></>}
+            {isPdfForm && compFields.length > 0 && <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e0e6e0' }}><label>Competent person’s name</label><input placeholder="Supervisor / competent person" /></div>}
+          </div>
+        )}
+        {afterSign.length > 0 && <p className="muted" style={{ fontSize: 13 }}>After the employee submits, this also needs {afterSign.join(' + ')} sign-off before it counts as complete.</p>}
+        <div className="row" style={{ marginTop: 12 }}><button className="secondary" onClick={onClose}>Close preview</button></div>
+      </div>
     </div>
   )
 }
