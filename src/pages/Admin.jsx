@@ -18,7 +18,7 @@ const DOC_TYPES = [
   ['task', 'Task'],
 ]
 
-const TABS = ['Documents', 'Packs', 'People', 'Organisation']
+const TABS = ['Documents', 'People', 'Organisation'] // 'Packs' retired — assignment is now allocator-driven
 
 export default function Admin({ profile }) {
   const [tab, setTab] = useState('Documents')
