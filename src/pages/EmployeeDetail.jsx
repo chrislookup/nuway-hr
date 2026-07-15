@@ -21,11 +21,16 @@ export default function EmployeeDetail({ profile }) {
   const [impBusy, setImpBusy] = useState(false)
   const [rej, setRej] = useState({ id: null, reason: '' })
   const [showLic, setShowLic] = useState(false)
+  const [allLocs, setAllLocs] = useState([])
+  const [allRoles, setAllRoles] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [savingDetails, setSavingDetails] = useState(false)
+  const [ef, setEf] = useState(null)
 
   async function load() {
     await loadCatOrder()
     const { data: e } = await supabase.from('profiles')
-      .select('*, employee_locations(location_id, locations(name)), employee_job_roles(job_roles(name))').eq('id', id).single()
+      .select('*, employee_locations(location_id, locations(name)), employee_job_roles(job_role_id, job_roles(name))').eq('id', id).single()
     setEmp(e)
     const locIds = [...new Set((e?.employee_locations || []).map(x => x.location_id).filter(Boolean))]
     if (locIds.length) { const { data: vs } = await supabase.from('vehicles').select('id, rego, type, induction_document_id, location_id').in('location_id', locIds).eq('active', true).order('rego'); setStoreVehicles(vs || []) } else setStoreVehicles([])
@@ -40,6 +45,10 @@ export default function EmployeeDetail({ profile }) {
     setDocs(d || [])
     const { data: lt } = await supabase.from('licence_types').select('*').order('name')
     setLicTypes(lt || [])
+    const { data: al } = await supabase.from('locations').select('id, name').eq('active', true).order('name')
+    setAllLocs(al || [])
+    const { data: ar } = await supabase.from('job_roles').select('id, name').eq('active', true).order('name')
+    setAllRoles(ar || [])
   }
   useEffect(() => { load() }, [id])
 
@@ -128,6 +137,39 @@ export default function EmployeeDetail({ profile }) {
     if (error) { setMsg('Could not update: ' + error.message); return }
     setMsg(val ? 'Document put on hold.' : 'Document resumed.'); load()
   }
+  const EMP_TYPE_OPTS = [['casual', 'Casual'], ['part_time', 'Part-time'], ['full_time', 'Full-time'], ['salary', 'Salary']]
+  function openEdit() {
+    setEf({
+      first_name: emp.first_name || '', last_name: emp.last_name || '', mobile: emp.mobile || '',
+      employment_type: emp.employment_type || '', date_of_birth: emp.date_of_birth || '', start_date: emp.start_date || '',
+      locationIds: [...new Set((emp.employee_locations || []).map(x => x.location_id).filter(Boolean))],
+      roleIds: [...new Set((emp.employee_job_roles || []).map(x => x.job_role_id).filter(Boolean))],
+    })
+    setEditing(true); setMsg('')
+  }
+  const toggleEf = (key, val) => setEf(p => ({ ...p, [key]: p[key].includes(val) ? p[key].filter(x => x !== val) : [...p[key], val] }))
+  async function saveDetails() {
+    if (!ef.first_name.trim() || !ef.last_name.trim()) { setMsg('First and last name are required.'); return }
+    setSavingDetails(true); setMsg('')
+    const { error: pe } = await supabase.from('profiles').update({
+      first_name: ef.first_name.trim(), last_name: ef.last_name.trim(), mobile: ef.mobile.trim() || null,
+      employment_type: ef.employment_type || null, date_of_birth: ef.date_of_birth || null, start_date: ef.start_date || null,
+    }).eq('id', id)
+    if (pe) { setMsg('Could not save: ' + pe.message); setSavingDetails(false); return }
+    const curLoc = new Set((emp.employee_locations || []).map(x => x.location_id))
+    const delLoc = [...curLoc].filter(x => !ef.locationIds.includes(x))
+    const addLoc = ef.locationIds.filter(x => !curLoc.has(x))
+    if (delLoc.length) await supabase.from('employee_locations').delete().eq('employee_id', id).in('location_id', delLoc)
+    if (addLoc.length) await supabase.from('employee_locations').insert(addLoc.map((l, i) => ({ employee_id: id, location_id: l, is_primary: curLoc.size === 0 && i === 0 })))
+    const curRole = new Set((emp.employee_job_roles || []).map(x => x.job_role_id))
+    const delRole = [...curRole].filter(x => !ef.roleIds.includes(x))
+    const addRole = ef.roleIds.filter(x => !curRole.has(x))
+    if (delRole.length) await supabase.from('employee_job_roles').delete().eq('employee_id', id).in('job_role_id', delRole)
+    if (addRole.length) await supabase.from('employee_job_roles').insert(addRole.map(r => ({ employee_id: id, job_role_id: r })))
+    const { data: pushed, error: re } = await supabase.rpc('repush_employee', { emp: id })
+    setMsg(re ? ('Details saved, but pushing new documents failed: ' + re.message) : `Details saved.${pushed ? ` Pushed ${pushed} new document${pushed === 1 ? '' : 's'} to their to-do.` : ' No new documents needed.'}`)
+    setEditing(false); setSavingDetails(false); load()
+  }
   if (!emp) return <p className="muted">Loading…</p>
   const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
@@ -156,6 +198,46 @@ export default function EmployeeDetail({ profile }) {
         started {fmtDate(emp.start_date)} · {emp.email} · {emp.mobile || 'no mobile'}
       </p>
       {msg && <div className="success">{msg}</div>}
+
+      {['admin', 'manager'].includes(profile.tier) && (
+        <div className="card">
+          <div className="row between">
+            <h2>Details</h2>
+            {!editing && <button className="small" onClick={openEdit}>Edit details</button>}
+          </div>
+          {!editing ? (
+            <p className="muted" style={{ margin: 0 }}>Role, store, employment type, date of birth and contact details. Editing store or role will push any newly-required documents to this person. Access level (admin/manager/staff) can only be changed by an admin.</p>
+          ) : (
+            <div style={{ marginTop: 6 }}>
+              <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                <div><label>First name</label><input value={ef.first_name} onChange={e => setEf({ ...ef, first_name: e.target.value })} /></div>
+                <div><label>Last name</label><input value={ef.last_name} onChange={e => setEf({ ...ef, last_name: e.target.value })} /></div>
+                <div><label>Mobile</label><input value={ef.mobile} onChange={e => setEf({ ...ef, mobile: e.target.value })} /></div>
+                <div><label>Employment type</label>
+                  <select value={ef.employment_type} onChange={e => setEf({ ...ef, employment_type: e.target.value })}>
+                    <option value="">—</option>
+                    {EMP_TYPE_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div><label>Date of birth</label><input type="date" value={ef.date_of_birth || ''} onChange={e => setEf({ ...ef, date_of_birth: e.target.value })} /></div>
+                <div><label>Start date</label><input type="date" value={ef.start_date || ''} onChange={e => setEf({ ...ef, start_date: e.target.value })} /></div>
+              </div>
+              <label style={{ marginTop: 10 }}>Roles</label>
+              <div className="checkgrid">
+                {allRoles.map(r => <label key={r.id}><input type="checkbox" style={{ width: 'auto' }} checked={ef.roleIds.includes(r.id)} onChange={() => toggleEf('roleIds', r.id)} />{r.name}</label>)}
+              </div>
+              <label style={{ marginTop: 10 }}>Stores</label>
+              <div className="checkgrid">
+                {allLocs.map(l => <label key={l.id}><input type="checkbox" style={{ width: 'auto' }} checked={ef.locationIds.includes(l.id)} onChange={() => toggleEf('locationIds', l.id)} />{l.name}</label>)}
+              </div>
+              <div className="row" style={{ marginTop: 12 }}>
+                <button onClick={saveDetails} disabled={savingDetails}>{savingDetails ? 'Saving…' : 'Save details'}</button>
+                <button className="secondary" onClick={() => setEditing(false)} disabled={savingDetails}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <div className="row between">
