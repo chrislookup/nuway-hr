@@ -41,8 +41,18 @@ export default function NewHire({ profile }) {
     // Keep only the vehicle inductions the manager selected (trim any store vehicles auto-assigned)
     if (data?.employee_id) {
       const { data: vAsg } = await supabase.from('assignments').select('id, vehicle_id').eq('employee_id', data.employee_id).not('vehicle_id', 'is', null)
+      const existing = new Set((vAsg || []).map(a => a.vehicle_id))
       const toDelete = (vAsg || []).filter(a => !f.vehicle_ids.includes(a.vehicle_id)).map(a => a.id)
       if (toDelete.length) await supabase.from('assignments').delete().in('id', toDelete)
+      const missing = f.vehicle_ids.filter(id => !existing.has(id))
+      if (missing.length) {
+        const { data: vehs } = await supabase.from('vehicles').select('id, induction_document_id').in('id', missing).not('induction_document_id', 'is', null)
+        const due = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+        if (vehs?.length) {
+          const { error: ie } = await supabase.from('assignments').insert(vehs.map(v => ({ employee_id: data.employee_id, document_id: v.induction_document_id, vehicle_id: v.id, source: 'manual', assigned_by: profile.id, due_date: due })))
+          if (ie) { setErr(`${f.first_name} was created, but the vehicle inductions couldn't be assigned (${ie.message}). Add them from the employee's profile.`); setBusy(false); return }
+        }
+      }
     }
     setOk(`${f.first_name} created${f.vehicle_ids.length ? ` with ${f.vehicle_ids.length} vehicle induction(s)` : ''}. They'll get an invite email to set their password.`)
     setBusy(false)
