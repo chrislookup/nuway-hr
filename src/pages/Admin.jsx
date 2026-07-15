@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
 import QuestionBuilder from '../components/QuestionBuilder'
+import RichText from '../components/RichText'
 const PdfFieldEditor = lazy(() => import('../components/PdfFieldEditor'))
 import ConditionsBuilder from '../components/ConditionsBuilder'
 import { supabase, CAPABILITIES, fmtDate, catRank, loadCatOrder } from '../lib/supabase'
@@ -234,10 +235,6 @@ function Documents({ profile }) {
               <select value={edit.doc_type} onChange={e => setEdit({ ...edit, doc_type: e.target.value })}>
                 {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select></div>
-            <div style={{ flex: 1 }}><label>Completed by</label>
-              <select value={edit.completed_by} onChange={e => setEdit({ ...edit, completed_by: e.target.value })}>
-                <option>employee</option><option>manager</option><option>both</option>
-              </select></div>
             <div style={{ width: 150 }}><label>Refresher (months)</label>
               <input type="number" value={edit.recurrence_months || ''} onChange={e => setEdit({ ...edit, recurrence_months: e.target.value ? Number(e.target.value) : null })} /></div>
           </div>
@@ -249,8 +246,10 @@ function Documents({ profile }) {
             <label><input type="checkbox" checked={!!edit.requires_admin_signoff} onChange={e => setEdit({ ...edit, requires_admin_signoff: e.target.checked })} />Admin sign-off</label>
             <label><input type="checkbox" checked={!!edit.requires_assessor_signoff} onChange={e => setEdit({ ...edit, requires_assessor_signoff: e.target.checked })} />Competent-person sign-off</label>
             <label><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Active</label>
-            <label><input type="checkbox" checked={!!edit.pre_employment} onChange={e => setEdit({ ...edit, pre_employment: e.target.checked })} />Pre-employment form (print-only, not part of onboarding)</label>
           </div>
+
+          <label style={{ marginTop: 12 }}>Instructions for staff <span className="muted" style={{ fontWeight: 400 }}>(optional — shown at the top when they open the document)</span></label>
+          <RichText value={edit.instructions || ''} onChange={html => setEdit({ ...edit, instructions: html })} placeholder="e.g. Read the attached policy, then tick each statement and sign." />
 
           <div className="row" style={{ marginTop: 12 }}>
             <div style={{ flex: 1 }}>

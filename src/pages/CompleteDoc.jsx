@@ -239,6 +239,7 @@ export default function CompleteDoc({ profile }) {
       <a onClick={() => nav(-1)} style={{ cursor: 'pointer' }}>&larr; Back</a>
       <h1>{doc.code} — {doc.title}</h1>
       <p className="muted">{doc.document_categories?.name} · due {fmtDate(a.due_date)}</p>
+      {doc.instructions && <div className="ackbox" style={{ marginBottom: 14 }} dangerouslySetInnerHTML={{ __html: String(doc.instructions).replace(/<script[\s\S]*?<\/script>/gi, '') }} />}
 
       {a.status === 'rejected' && (
         <div className="error" style={{ marginBottom: 12 }}>
