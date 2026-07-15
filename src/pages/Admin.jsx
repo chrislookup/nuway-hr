@@ -89,7 +89,7 @@ function Documents({ profile }) {
   }
   function newDoc() {
     setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([]); setPdfEditorOpen(true)
-    setEdit({ code: '', title: '', doc_type: 'standard', requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
+    setEdit({ code: '', title: '', doc_type: 'standard', pre_employment: false, requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
     if (!version?.pdf_path) return
@@ -243,6 +243,7 @@ function Documents({ profile }) {
             <label><input type="checkbox" checked={!!edit.requires_admin_signoff} onChange={e => setEdit({ ...edit, requires_admin_signoff: e.target.checked })} />Admin sign-off</label>
             <label><input type="checkbox" checked={!!edit.requires_assessor_signoff} onChange={e => setEdit({ ...edit, requires_assessor_signoff: e.target.checked })} />Competent-person sign-off</label>
             <label><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Active</label>
+            <label><input type="checkbox" checked={!!edit.pre_employment} onChange={e => setEdit({ ...edit, pre_employment: e.target.checked })} />Pre-employment form (print-only, not part of onboarding)</label>
           </div>
 
           <div className="row" style={{ marginTop: 12 }}>

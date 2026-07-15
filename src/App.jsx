@@ -12,6 +12,7 @@ import SignedRecord from './pages/SignedRecord'
 import AssessDoc from './pages/AssessDoc'
 import Admin from './pages/Admin'
 import StoreSettings from './pages/StoreSettings'
+import PreEmployment from './pages/PreEmployment'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -78,6 +79,7 @@ export default function App() {
           <nav>
             <NavLink to="/" end>My Dashboard</NavLink>
             {isMgr && <NavLink to="/team">Team{reviewCount > 0 && <span className="navbadge">{reviewCount}</span>}</NavLink>}
+            {isMgr && <NavLink to="/pre-employment">Pre-employment</NavLink>}
             {isMgr && <NavLink to="/new-hire">New Hire</NavLink>}
             {isMgr && <NavLink to="/store">Store</NavLink>}
             {tier === 'admin' && <NavLink to="/admin">Admin</NavLink>}
@@ -93,6 +95,7 @@ export default function App() {
             <Route path="/assess/:assignmentId" element={<AssessDoc profile={profile} />} />
             {isMgr && <Route path="/team" element={<Team profile={profile} />} />}
             {isMgr && <Route path="/employee/:id" element={<EmployeeDetail profile={profile} />} />}
+            {isMgr && <Route path="/pre-employment" element={<PreEmployment profile={profile} />} />}
             {isMgr && <Route path="/new-hire" element={<NewHire profile={profile} />} />}
             {isMgr && <Route path="/store" element={<StoreSettings profile={profile} />} />}
             {tier === 'admin' && <Route path="/admin/*" element={<Admin profile={profile} />} />}
