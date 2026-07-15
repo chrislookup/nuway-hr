@@ -73,6 +73,13 @@ export default function Dashboard({ profile }) {
     if (a.status === 'completed') byCat[cat].done++
   }
 
+  async function removeLicence(l) {
+    if (!window.confirm(`Remove your ${l.licence_types?.name || 'licence'}? You can add it again anytime.`)) return
+    const { error } = await supabase.from('licences').update({ active: false }).eq('id', l.id)
+    if (error) { window.alert('Could not remove: ' + error.message); return }
+    loadLic()
+  }
+
   return (
     <div>
       <h1>G'day, {profile.first_name}</h1>
@@ -207,7 +214,7 @@ export default function Dashboard({ profile }) {
         {licences.length === 0 && !showLic && <p className="muted">No licences yet. Add your driver, forklift or loader licence with front &amp; back photos.</p>}
         {licences.length > 0 && (
           <table>
-            <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th></tr></thead>
+            <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th><th></th></tr></thead>
             <tbody>
               {licences.map(l => {
                 const soon = l.expiry_date && new Date(l.expiry_date) < new Date(Date.now() + 60 * 864e5)
@@ -219,6 +226,7 @@ export default function Dashboard({ profile }) {
                     <td className="muted">{l.conditions || '—'}</td>
                     <td>{l.expiry_date ? <span className={soon ? 'badge overdue' : ''}>{fmtDate(l.expiry_date)}</span> : '—'}</td>
                     <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
+                    <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => removeLicence(l)}>Remove</button></td>
                   </tr>
                 )
               })}

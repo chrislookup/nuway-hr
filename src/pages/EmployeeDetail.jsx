@@ -170,6 +170,12 @@ export default function EmployeeDetail({ profile }) {
     setMsg(re ? ('Details saved, but pushing new documents failed: ' + re.message) : `Details saved.${pushed ? ` Pushed ${pushed} new document${pushed === 1 ? '' : 's'} to their to-do.` : ' No new documents needed.'}`)
     setEditing(false); setSavingDetails(false); load()
   }
+  async function removeLicence(l) {
+    if (!window.confirm(`Remove ${l.licence_types?.name || 'this licence'} for ${emp.first_name}?`)) return
+    const { error } = await supabase.from('licences').update({ active: false }).eq('id', l.id)
+    if (error) { setMsg('Could not remove: ' + error.message); return }
+    setMsg('Licence removed.'); load()
+  }
   if (!emp) return <p className="muted">Loading…</p>
   const ver = a => a.completions?.[0]?.document_versions?.version_no
   const byDoc = {}
@@ -336,7 +342,7 @@ export default function EmployeeDetail({ profile }) {
         </div>
         {showLic && <LicenceForm employeeId={id} licenceTypes={licTypes} verifiedBy={profile.id} onSaved={() => { setShowLic(false); load() }} onCancel={() => setShowLic(false)} />}
         <table>
-          <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th></tr></thead>
+          <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th><th></th></tr></thead>
           <tbody>
             {licences.map(l => (
               <tr key={l.id}>
@@ -346,9 +352,10 @@ export default function EmployeeDetail({ profile }) {
                 <td className="muted">{l.conditions || '—'}</td>
                 <td>{fmtDate(l.expiry_date)}</td>
                 <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
+                <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => removeLicence(l)}>Remove</button></td>
               </tr>
             ))}
-            {licences.length === 0 && <tr><td colSpan={6} className="muted">No licences recorded.</td></tr>}
+            {licences.length === 0 && <tr><td colSpan={7} className="muted">No licences recorded.</td></tr>}
           </tbody>
         </table>
       </div>

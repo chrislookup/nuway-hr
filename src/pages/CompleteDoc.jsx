@@ -16,7 +16,9 @@ export default function CompleteDoc({ profile }) {
   const [sig, setSig] = useState(null)
   const [signedName, setSignedName] = useState('')
   const [agree, setAgree] = useState(false)
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
+  const addFiles = fl => setFiles(prev => [...prev, ...Array.from(fl || [])])
+  const removeFile = i => setFiles(prev => prev.filter((_, j) => j !== i))
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
@@ -158,7 +160,7 @@ export default function CompleteDoc({ profile }) {
     if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
     if (ackList.length && ackList.some((_, i) => !acks[i])) { setErr('Please tick all the acknowledgement statements to confirm.'); return }
     for (const pi of assessorIdx) { if (!values[`cp_${pi}_sig`] || !String(values[`cp_${pi}_name`] || '').trim()) { setErr('Each competent-person section needs the competent person’s name and signature.'); return } }
-    if (isUpload && !file) { setErr('Please choose a file to upload.'); return }
+    if (isUpload && !files.length) { setErr('Please add at least one photo or file.'); return }
     if (hasQuiz) {
       const qs = test.questions || []
       if (qs.some((_, i) => answers[i] === undefined)) { setErr('Please answer every test question.'); return }
@@ -184,10 +186,18 @@ export default function CompleteDoc({ profile }) {
       }
       const cleanValues = Object.fromEntries(Object.entries(values).filter(([k]) => !k.startsWith('cp_')))
       let uploadedPath = null
-      if (file) {
-        uploadedPath = `${a.employee_id}/${a.id}-${file.name.replace(/[^\w.\-]+/g, '_')}`
-        const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, file, { upsert: true })
-        if (fe) throw fe
+      if (files.length) {
+        if (files.length === 1 && ((files[0].type || '').includes('pdf') || files[0].name.toLowerCase().endsWith('.pdf'))) {
+          uploadedPath = `${a.employee_id}/${a.id}-${files[0].name.replace(/[^\w.\-]+/g, '_')}`
+          const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, files[0], { upsert: true })
+          if (fe) throw fe
+        } else {
+          const { filesToPdf } = await import('../lib/filesToPdf')
+          const bytes = await filesToPdf(files)
+          uploadedPath = `${a.employee_id}/${a.id}-evidence.pdf`
+          const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
+          if (fe) throw fe
+        }
       }
       let passed = null, score = null
       if (hasQuiz) {
@@ -297,8 +307,23 @@ export default function CompleteDoc({ profile }) {
           </div>
         )}
         {version?.form_schema && <FormRenderer schema={version.form_schema} values={values} onChange={setValues} />}
-        {isUpload && (<><label>Upload file (photo or PDF)</label>
-          <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} /></>)}
+        {isUpload && (<>
+          <label>Upload evidence <span className="muted" style={{ fontWeight: 400 }}>(take photos or choose files — you can add several; they’re saved as one PDF)</span></label>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            <label className="btnfile">📷 Take photo<input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { addFiles(e.target.files); e.target.value = '' }} /></label>
+            <label className="btnfile">📎 Choose file(s)<input type="file" accept="image/*,.pdf" multiple style={{ display: 'none' }} onChange={e => { addFiles(e.target.files); e.target.value = '' }} /></label>
+          </div>
+          {files.length > 0 && (
+            <ul style={{ listStyle: 'none', padding: 0, marginTop: 8 }}>
+              {files.map((f, i) => (
+                <li key={i} className="row between" style={{ padding: '4px 8px', border: '1px solid var(--line)', borderRadius: 6, marginBottom: 4 }}>
+                  <span style={{ fontSize: 13 }}>{f.type?.startsWith('image') ? '🖼️' : '📄'} {f.name || `photo ${i + 1}`}</span>
+                  <button type="button" className="small" style={{ color: '#b00020' }} onClick={() => removeFile(i)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>)}
       </div>
 
       {hasQuiz && (
