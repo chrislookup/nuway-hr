@@ -25,7 +25,7 @@ export default function RichText({ value, onChange, placeholder }) {
 
   const Btn = ({ onClick, title, children }) => (
     <button type="button" title={title} onMouseDown={e => e.preventDefault()} onClick={onClick}
-      style={{ padding: '2px 8px', minWidth: 30, border: '1px solid #cdd3cd', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>{children}</button>
+      style={{ padding: '2px 8px', minWidth: 30, border: '1px solid #cdd3cd', background: '#fff', color: '#333', borderRadius: 4, cursor: 'pointer', fontSize: 13, lineHeight: 1.4 }}>{children}</button>
   )
 
   return (
