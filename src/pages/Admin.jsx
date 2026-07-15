@@ -59,7 +59,7 @@ function Documents({ profile }) {
   async function load() {
     await loadCatOrder()
     const { data } = await supabase.from('documents').select('*, document_categories(name)').order('code')
-    const sorted = (data || []).sort((a, b) => catRank(a.document_categories?.name) - catRank(b.document_categories?.name) || (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }))
+    const sorted = (data || []).filter(d => !d.pre_employment).sort((a, b) => catRank(a.document_categories?.name) - catRank(b.document_categories?.name) || (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }))
     setDocs(sorted)
     const { data: c } = await supabase.from('document_categories').select('*').order('sort_order')
     setCats(c || [])
