@@ -19,7 +19,7 @@ const DOC_TYPES = [
   ['task', 'Task'],
 ]
 
-const TABS = ['Documents', 'People', 'Organisation'] // 'Packs' retired — assignment is now allocator-driven
+const TABS = ['Documents', 'People', 'Organisation', 'Test accounts'] // 'Packs' retired — assignment is now allocator-driven
 
 export default function Admin({ profile }) {
   const [tab, setTab] = useState('Documents')
@@ -33,6 +33,7 @@ export default function Admin({ profile }) {
       {tab === 'Packs' && <Packs />}
       {tab === 'People' && <People profile={profile} />}
       {tab === 'Organisation' && <Organisation />}
+      {tab === 'Test accounts' && <TestAccounts />}
     </div>
   )
 }
@@ -759,6 +760,85 @@ function Organisation() {
           <button className="small" onClick={async () => { if (nlt.trim()) { await supabase.from('licence_types').insert({ name: nlt.trim() }); setNlt(''); load() } }}>Add</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+function TestAccounts() {
+  const [roles, setRoles] = useState([])
+  const [locs, setLocs] = useState([])
+  const [accts, setAccts] = useState([])
+  const [f, setF] = useState({ first: '', last: '', tier: 'employee', role: '', store: '', email: '', pw: 'Nuway4207' })
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function load() {
+    const [r, l, a] = await Promise.all([
+      supabase.from('job_roles').select('id, name').eq('active', true).order('name'),
+      supabase.from('locations').select('id, name').eq('active', true).order('name'),
+      supabase.from('profiles').select('id, first_name, last_name, email, tier').eq('is_test', true).order('created_at'),
+    ])
+    setRoles(r.data || []); setLocs(l.data || []); setAccts(a.data || [])
+  }
+  useEffect(() => { load() }, [])
+  function quick(kind) {
+    const store = locs[0]?.id || ''
+    if (kind === 'manager') setF({ first: 'Test', last: 'Manager', tier: 'manager', role: roles.find(r => r.name === 'Manager')?.id || '', store, email: 'testmanager@nuway.test', pw: 'Nuway4207' })
+    else setF({ first: 'Test', last: 'Employee', tier: 'employee', role: roles.find(r => r.name === 'Yard')?.id || '', store, email: 'testemployee@nuway.test', pw: 'Nuway4207' })
+  }
+  async function create() {
+    if (!f.first.trim() || !f.last.trim() || !f.email.trim() || !f.pw) { setMsg('Fill in name, email and password.'); return }
+    setBusy(true); setMsg('')
+    const { error } = await supabase.rpc('create_test_account', { p_first: f.first.trim(), p_last: f.last.trim(), p_email: f.email.trim(), p_tier: f.tier, p_role: f.role || null, p_store: f.store || null, p_pw: f.pw })
+    setBusy(false)
+    if (error) { setMsg('Failed: ' + error.message); return }
+    setMsg(`Created ${f.first} ${f.last}. Log in at the app with ${f.email.trim()} / ${f.pw}`)
+    setF({ first: '', last: '', tier: 'employee', role: '', store: '', email: '', pw: 'Nuway4207' }); load()
+  }
+  async function del(a) {
+    if (!window.confirm(`Delete test account ${a.first_name} ${a.last_name} (${a.email})? This removes the login and all their data.`)) return
+    const { error } = await supabase.rpc('delete_test_account', { p_uid: a.id })
+    if (error) { setMsg('Failed: ' + error.message); return }
+    setMsg('Test account deleted.'); load()
+  }
+  return (
+    <div className="card">
+      <h2>Test accounts</h2>
+      <p className="muted">Create throwaway logins to test the manager and employee portals. They log in immediately with the email &amp; password below — no invite email. Delete them before you add real staff.</p>
+      {msg && <div className="success">{msg}</div>}
+      <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+        <button className="small secondary" onClick={() => quick('manager')}>Prefill Test Manager</button>
+        <button className="small secondary" onClick={() => quick('employee')}>Prefill Test Employee</button>
+      </div>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <div><label>First name</label><input value={f.first} onChange={e => setF({ ...f, first: e.target.value })} /></div>
+        <div><label>Last name</label><input value={f.last} onChange={e => setF({ ...f, last: e.target.value })} /></div>
+        <div><label>Access level</label>
+          <select value={f.tier} onChange={e => setF({ ...f, tier: e.target.value })}><option value="employee">Employee</option><option value="manager">Manager</option></select></div>
+        <div><label>Job role</label>
+          <select value={f.role} onChange={e => setF({ ...f, role: e.target.value })}><option value="">—</option>{roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
+        <div><label>Store</label>
+          <select value={f.store} onChange={e => setF({ ...f, store: e.target.value })}><option value="">—</option>{locs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+      </div>
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+        <div style={{ flex: 1, minWidth: 220 }}><label>Login email</label><input value={f.email} onChange={e => setF({ ...f, email: e.target.value })} placeholder="testmanager@nuway.test" /></div>
+        <div><label>Password</label><input value={f.pw} onChange={e => setF({ ...f, pw: e.target.value })} /></div>
+        <div style={{ alignSelf: 'flex-end' }}><button onClick={create} disabled={busy}>{busy ? 'Creating…' : 'Create test account'}</button></div>
+      </div>
+      <table style={{ marginTop: 16 }}>
+        <thead><tr><th>Name</th><th>Access</th><th>Login email</th><th></th></tr></thead>
+        <tbody>
+          {accts.map(a => (
+            <tr key={a.id}>
+              <td>{a.first_name} {a.last_name}</td>
+              <td className="muted">{a.tier}</td>
+              <td>{a.email}</td>
+              <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => del(a)}>Delete</button></td>
+            </tr>
+          ))}
+          {accts.length === 0 && <tr><td colSpan={4} className="muted">No test accounts yet.</td></tr>}
+        </tbody>
+      </table>
     </div>
   )
 }
