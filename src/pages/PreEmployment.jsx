@@ -20,7 +20,7 @@ export default function PreEmployment({ profile }) {
     setRoles(r || [])
     const { data: m } = await supabase.from('role_pre_documents').select('job_role_id, document_id')
     setMap(m || [])
-    const { data: d } = await supabase.from('documents').select('id, code, title, current_version_id, pre_emp_age_max').eq('pre_employment', true).order('code')
+    const { data: d } = await supabase.from('documents').select('id, code, title, current_version_id, pre_emp_age_max, pre_emp_provided').eq('pre_employment', true).order('code')
     setPreDocs(d || [])
     const vids = (d || []).map(x => x.current_version_id).filter(Boolean)
     const mm = {}
@@ -37,6 +37,30 @@ export default function PreEmployment({ profile }) {
   for (const m of map) if (sel.includes(m.job_role_id)) packIds.add(m.document_id)
   for (const d of preDocs) if (d.pre_emp_age_max != null && age < d.pre_emp_age_max) packIds.add(d.id)
   const pack = [...packIds].map(id => docById[id]).filter(Boolean).sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }))
+  const printForms = pack.filter(d => !d.pre_emp_provided)
+  const collectItems = pack.filter(d => d.pre_emp_provided)
+  const roleNames = roles.filter(r => sel.includes(r.id)).map(r => r.name).join(', ')
+  const ageLabel = age >= 99 ? '18 or over' : age < 16 ? 'Under 16' : 'Under 18 (16–17)'
+  const STEPS = [
+    'Print the forms below and interview the applicant.',
+    'Collect from the applicant: CV / resume, and front & back copies of any licence the role requires (e.g. driver, forklift, loader).',
+    'Complete the forms, then STOP & CHECK they are correctly initialled and signed by all relevant parties.',
+    'Scan all completed documents.',
+    'Name each file per this checklist and the applicant\'s name — e.g. "F5.1.2 – Interview Questions – [Applicant Name]".',
+    'Email the completed set to steve@nuway.com.au and brent@nuway.com.au for approval.',
+  ]
+  function printChecklist() {
+    const items = [...printForms.map(d => `${d.code || ''} ${d.title}`), ...collectItems.map(d => d.title)]
+    const w = window.open('', '_blank')
+    w.document.write(`<html><head><title>Pre-employment checklist</title><style>body{font-family:Segoe UI,sans-serif;padding:28px;color:#222} h1{color:#008C95} h2{color:#008C95;margin-top:20px;font-size:16px} li{margin:7px 0} .box{display:inline-block;width:14px;height:14px;border:1.5px solid #333;margin-right:8px;vertical-align:middle}</style></head><body>
+      <h1>Pre-employment checklist</h1>
+      <p><b>Position(s):</b> ${roleNames || '—'} &nbsp; <b>Applicant age:</b> ${ageLabel}</p>
+      <p><b>Applicant name:</b> ______________________________</p>
+      <h2>Documents required</h2><div>${items.map(i => `<div><span class=box></span> ${i}</div>`).join('')}</div>
+      <h2>Process</h2><ol>${STEPS.map(x => `<li>${x.replace(/</g,'&lt;')}</li>`).join('')}</ol>
+    </body></html>`)
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 300)
+  }
 
   async function openForm(d) {
     const path = vers[d.id]
@@ -107,17 +131,29 @@ export default function PreEmployment({ profile }) {
         {msg && <div className="error" style={{ marginTop: 10 }}>{msg}</div>}
         {(sel.length > 0 || pack.length > 0) && (
           <div style={{ marginTop: 14 }}>
-            <h3>Forms to print ({pack.length})</h3>
-            {pack.length === 0 && <p className="muted">No forms mapped to the selected position(s) yet.</p>}
+            <div className="row between" style={{ alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Required documents</h3>
+              <button className="small" onClick={printChecklist}>🖨 Print checklist</button>
+            </div>
+            {pack.length === 0 && <p className="muted">No documents mapped to the selected position(s) yet.</p>}
+            {printForms.length > 0 && <><p className="muted" style={{ margin: '10px 0 4px', fontWeight: 600 }}>Forms to print &amp; complete</p>
             <table><tbody>
-              {pack.map(d => (
+              {printForms.map(d => (
                 <tr key={d.id}>
                   <td><b>{d.code}</b> {d.title}</td>
                   <td className="muted">{vers[d.id] ? 'PDF ready' : 'no PDF yet'}</td>
                   <td style={{ textAlign: 'right' }}><button className="small" disabled={!vers[d.id]} onClick={() => openForm(d)}>Open / print ↗</button></td>
                 </tr>
               ))}
-            </tbody></table>
+            </tbody></table></>}
+            {collectItems.length > 0 && <><p className="muted" style={{ margin: '14px 0 4px', fontWeight: 600 }}>Collect from the applicant</p>
+            <table><tbody>
+              {collectItems.map(d => <tr key={d.id}><td>☐ {d.title}</td></tr>)}
+            </tbody></table></>}
+            <div className="ackbox" style={{ marginTop: 14 }}>
+              <b>Process</b>
+              <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>{STEPS.map((x, i) => <li key={i} style={{ margin: '4px 0' }}>{x}</li>)}</ol>
+            </div>
           </div>
         )}
       </div>
