@@ -55,7 +55,7 @@ export default function PreEmployment({ profile }) {
     w.document.write(`<html><head><title>Pre-employment checklist</title><style>body{font-family:Segoe UI,sans-serif;padding:28px;color:#222} h1{color:#008C95} h2{color:#008C95;margin-top:20px;font-size:16px} li{margin:7px 0} .box{display:inline-block;width:14px;height:14px;border:1.5px solid #333;margin-right:8px;vertical-align:middle}</style></head><body>
       <h1>Pre-employment checklist</h1>
       <p><b>Position(s):</b> ${roleNames || '—'} &nbsp; <b>Applicant age:</b> ${ageLabel}</p>
-      <p><b>Applicant name:</b> ______________________________</p>
+      <p><b>Applicant name:</b> ______________________________ &nbsp;&nbsp; <b>Planned start date:</b> ______________________</p>
       <h2>Documents required</h2><div>${items.map(i => `<div><span class=box></span> ${i}</div>`).join('')}</div>
       <h2>Process</h2><ol>${STEPS.map(x => `<li>${x.replace(/</g,'&lt;')}</li>`).join('')}</ol>
     </body></html>`)
