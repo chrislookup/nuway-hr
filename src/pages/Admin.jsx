@@ -271,7 +271,6 @@ function Documents({ profile }) {
             <label><input type="checkbox" checked={!!edit.requires_signature} onChange={e => setEdit({ ...edit, requires_signature: e.target.checked })} />Employee e-signature</label>
             <label><input type="checkbox" checked={!!edit.requires_manager_signoff} onChange={e => setEdit({ ...edit, requires_manager_signoff: e.target.checked })} />Manager sign-off</label>
             <label><input type="checkbox" checked={!!edit.requires_admin_signoff} onChange={e => setEdit({ ...edit, requires_admin_signoff: e.target.checked })} />Admin sign-off</label>
-            <label><input type="checkbox" checked={!!edit.requires_assessor_signoff} onChange={e => setEdit({ ...edit, requires_assessor_signoff: e.target.checked })} />Competent-person sign-off</label>
             <label><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Active</label>
           </div>
 
