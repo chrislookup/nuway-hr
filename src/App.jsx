@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import SetPassword from './pages/SetPassword'
+import Mfa from './pages/Mfa'
 import Dashboard from './pages/Dashboard'
 import CompleteDoc from './pages/CompleteDoc'
 import Team from './pages/Team'
@@ -20,6 +21,8 @@ export default function App() {
   const [recovery, setRecovery] = useState(false)
   const [reload, setReload] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
+  const [mfa, setMfa] = useState(undefined) // undefined=checking, null=cleared, 'enroll'|'challenge'
+  const [mfaReload, setMfaReload] = useState(0)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -45,6 +48,22 @@ export default function App() {
       .then(({ count }) => setReviewCount(count || 0))
   }, [profile])
 
+  // Two-factor gate: managers/admins must have 2FA; anyone with a factor must pass it
+  useEffect(() => {
+    if (!session || !profile) { setMfa(undefined); return }
+    let alive = true
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data, error }) => {
+      if (!alive) return
+      if (error || !data) { setMfa(null); return } // fail open on transient error, don't lock everyone out
+      const isMgr = profile.tier === 'manager' || profile.tier === 'admin'
+      if (data.currentLevel === 'aal2') setMfa(null)
+      else if (data.nextLevel === 'aal2') setMfa('challenge')
+      else if (isMgr) setMfa('enroll')
+      else setMfa(null)
+    })
+    return () => { alive = false }
+  }, [session, profile, mfaReload])
+
   if (session === undefined) return null
   if (!session) return <Login />
   // Password reset link → force a new password before continuing
@@ -64,6 +83,11 @@ export default function App() {
       </div>
     )
   }
+
+  // Two-factor step (managers/admins enrol; anyone with 2FA verifies) before the portal loads
+  if (mfa === undefined) return null
+  if (mfa === 'enroll') return <Mfa mode="enroll" onDone={() => setMfaReload(r => r + 1)} />
+  if (mfa === 'challenge') return <Mfa mode="challenge" onDone={() => setMfaReload(r => r + 1)} />
 
   const tier = profile.tier
   const isMgr = tier === 'manager' || tier === 'admin'

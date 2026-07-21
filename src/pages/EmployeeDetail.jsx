@@ -148,6 +148,12 @@ export default function EmployeeDetail({ profile }) {
     setEditing(true); setMsg('')
   }
   const toggleEf = (key, val) => setEf(p => ({ ...p, [key]: p[key].includes(val) ? p[key].filter(x => x !== val) : [...p[key], val] }))
+  const [mfaMsg, setMfaMsg] = useState('')
+  async function resetMfa() {
+    if (!confirm('Reset two-factor authentication for this person? They will be asked to set it up again next time they log in. Use this only if they have lost their authenticator.')) return
+    const { error } = await supabase.rpc('admin_reset_mfa', { target: id })
+    setMfaMsg(error ? ('Could not reset: ' + error.message) : 'Two-factor reset. They will set it up again at next login.')
+  }
   async function saveDetails() {
     if (!ef.first_name.trim() || !ef.last_name.trim()) { setMsg('First and last name are required.'); return }
     setSavingDetails(true); setMsg('')
@@ -209,8 +215,12 @@ export default function EmployeeDetail({ profile }) {
         <div className="card">
           <div className="row between">
             <h2>Details</h2>
-            {!editing && <button className="small" onClick={openEdit}>Edit details</button>}
+            <div className="row" style={{ gap: 6 }}>
+              {profile.tier === 'admin' && !editing && <button className="small secondary" onClick={resetMfa}>Reset 2FA</button>}
+              {!editing && <button className="small" onClick={openEdit}>Edit details</button>}
+            </div>
           </div>
+          {mfaMsg && <div className="success" style={{ marginTop: 6 }}>{mfaMsg}</div>}
           {!editing ? (
             <p className="muted" style={{ margin: 0 }}>Role, store, employment type, date of birth and contact details. Editing store or role will push any newly-required documents to this person. Access level (admin/manager/staff) can only be changed by an admin.</p>
           ) : (

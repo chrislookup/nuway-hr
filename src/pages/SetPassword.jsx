@@ -10,7 +10,8 @@ export default function SetPassword({ mode = 'first', onDone }) {
   async function submit(e) {
     e.preventDefault()
     setErr('')
-    if (pw.length < 8) { setErr('Please use at least 8 characters.'); return }
+    if (pw.length < 10) { setErr('Please use at least 10 characters.'); return }
+    if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw) || !/[0-9]/.test(pw)) { setErr('Use a mix of upper- and lower-case letters and at least one number.'); return }
     if (pw !== pw2) { setErr('The two passwords don’t match.'); return }
     setBusy(true)
     const { error } = await supabase.auth.updateUser({ password: pw })
@@ -33,6 +34,7 @@ export default function SetPassword({ mode = 'first', onDone }) {
         <form onSubmit={submit}>
           <label>New password</label>
           <input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" required />
+          <p className="muted" style={{ fontSize: 12, margin: '2px 0 8px' }}>At least 10 characters, with upper- and lower-case letters and a number. Avoid common or reused passwords.</p>
           <label>Confirm password</label>
           <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} autoComplete="new-password" required />
           {err && <div className="error">{err}</div>}
