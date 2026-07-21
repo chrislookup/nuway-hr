@@ -61,6 +61,8 @@ function Documents({ profile }) {
   const [reassign, setReassign] = useState(false)
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dueNum, setDueNum] = useState('')
+  const [dueUnit, setDueUnit] = useState('days')
 
   async function load() {
     await loadCatOrder()
@@ -106,6 +108,7 @@ function Documents({ profile }) {
 
   async function openEdit(d) {
     setMsg(''); setFile(null); setEdit(d); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setSaveAsk(false); setChangeNote(''); setReassign(false)
+    { const dd = d?.due_days; if (dd && dd % 7 === 0) { setDueUnit('weeks'); setDueNum(dd / 7) } else { setDueUnit('days'); setDueNum(dd ?? '') } }
     if (d?.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', d.current_version_id).single()
       setVersion(v || null); setMediaUrl(v?.media_url || ''); setPages(v?.form_schema?.pages || []); setPdfFields(v?.pdf_field_map || []); setPdfEditorOpen(!((v?.pdf_field_map || []).length))
@@ -116,7 +119,7 @@ function Documents({ profile }) {
     } else { setVersions([]); setPdfFields([]); setPdfEditorOpen(true) }
   }
   function newDoc() {
-    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([]); setPdfEditorOpen(true)
+    setMsg(''); setFile(null); setVersion(null); setMediaUrl(''); setPages([]); setTest(null); setVersions([]); setSaveAsk(false); setPdfFields([]); setPdfEditorOpen(true); setDueNum(''); setDueUnit('days')
     setEdit({ code: '', title: '', doc_type: 'standard', pre_employment: false, requires_signature: true, requires_manager_signoff: false, requires_admin_signoff: false, requires_assessor_signoff: false, completed_by: 'employee', active: true, category_id: cats[0]?.id })
   }
   async function viewMaster() {
@@ -229,7 +232,7 @@ function Documents({ profile }) {
       if (reassign) {
         const { data: rows } = await supabase.from('assignments').select('employee_id, profiles!assignments_employee_id_fkey(status)').eq('document_id', edit.id)
         const ids = [...new Set((rows || []).filter(r => r.profiles?.status === 'active').map(r => r.employee_id))]
-        const due = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+        const due = new Date(Date.now() + ((edit.due_days || 14) * 864e5)).toISOString().slice(0, 10)
         if (ids.length) await supabase.from('assignments').insert(ids.map(id => ({ employee_id: id, document_id: edit.id, source: 'manual', assigned_by: profile.id, due_date: due })))
         reassigned = ids.length
       }
@@ -264,6 +267,16 @@ function Documents({ profile }) {
               </select></div>
             <div style={{ width: 150 }}><label>Refresher (months)</label>
               <input type="number" value={edit.recurrence_months || ''} onChange={e => setEdit({ ...edit, recurrence_months: e.target.value ? Number(e.target.value) : null })} /></div>
+            <div style={{ width: 190 }}><label>Due after assigning</label>
+              <div className="row" style={{ gap: 6, margin: 0 }}>
+                <input type="number" min="0" style={{ width: 70 }} value={dueNum}
+                  onChange={e => { const n = e.target.value === '' ? '' : Number(e.target.value); setDueNum(n); setEdit({ ...edit, due_days: n === '' ? null : n * (dueUnit === 'weeks' ? 7 : 1) }) }} />
+                <select value={dueUnit} onChange={e => { const u = e.target.value; setDueUnit(u); setEdit({ ...edit, due_days: dueNum === '' ? null : Number(dueNum) * (u === 'weeks' ? 7 : 1) }) }}>
+                  <option value="days">days</option>
+                  <option value="weeks">weeks</option>
+                </select>
+              </div>
+              <p className="muted" style={{ fontSize: 11, margin: '2px 0 0' }}>Blank = default 14 days</p></div>
           </div>
 
           <label style={{ marginTop: 10 }}>Who must e-sign</label>
