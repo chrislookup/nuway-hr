@@ -775,8 +775,11 @@ function Organisation() {
       </div>
       <div className="card">
         <h2>Locations</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Add each store\'s email address to receive its fortnightly training &amp; compliance summary.</p>
         <table><tbody>{locations.map(l => (
           <tr key={l.id}><td>{l.name}</td><td className="muted">{l.code}</td>
+            <td><input type="email" placeholder="store@nuway.com.au" defaultValue={l.email || ''} style={{ width: 210 }}
+              onBlur={async e => { const v = e.target.value.trim(); await supabase.from('locations').update({ email: v || null }).eq('id', l.id) }} /></td>
             <td style={{ textAlign: 'right' }}>
               <button className={`small ${l.active ? 'secondary' : ''}`} onClick={async () => { await supabase.from('locations').update({ active: !l.active }).eq('id', l.id); load() }}>{l.active ? 'Active' : 'Inactive'}</button>
             </td></tr>))}</tbody></table>
