@@ -36,8 +36,24 @@ export default function NewHire({ profile }) {
     if (!f.roles.length || !f.locations.length) { setErr('Pick at least one role and one location.'); return }
     if (!f.commencement_approved_by) { setErr('Commencement approval is required.'); return }
     setBusy(true)
+    // Guard: this email may already be in the system (e.g. a past employee)
+    const email = f.email.trim().toLowerCase()
+    const { data: exRows } = await supabase.from('profiles').select('first_name, last_name, status').ilike('email', email).limit(1)
+    const existing = exRows && exRows[0]
+    if (existing) {
+      setErr(existing.status === 'active'
+        ? `${existing.first_name} ${existing.last_name} is already an active employee with this email.`
+        : `This email already belongs to a past employee (${existing.first_name} ${existing.last_name}). Reactivate them from the Team page instead of creating a new account.`)
+      setBusy(false); return
+    }
     const { data, error } = await supabase.functions.invoke('create-employee', { body: f })
-    if (error || data?.error) { setErr(data?.error || error.message || 'Failed — is the create-employee function deployed?'); setBusy(false); return }
+    if (error || data?.error) {
+      const msg = data?.error || error?.message || ''
+      setErr(/already|exists|registered|duplicate|non-2xx/i.test(msg)
+        ? 'An account with this email already exists — it may be a past employee. Check the Team page (you can reactivate them there), or use a different email.'
+        : (msg || 'Failed — is the create-employee function deployed?'))
+      setBusy(false); return
+    }
     // Keep only the vehicle inductions the manager selected (trim any store vehicles auto-assigned)
     if (data?.employee_id) {
       const { data: vAsg } = await supabase.from('assignments').select('id, vehicle_id').eq('employee_id', data.employee_id).not('vehicle_id', 'is', null)
