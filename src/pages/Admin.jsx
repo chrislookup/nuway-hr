@@ -776,10 +776,12 @@ function Organisation() {
       <div className="card">
         <h2>Locations</h2>
         <p className="muted" style={{ marginTop: 0 }}>Add each store\'s email address to receive its fortnightly training &amp; compliance summary.</p>
-        <table><tbody>{locations.map(l => (
+        <table><thead><tr><th align="left">Store</th><th></th><th align="left" style={{ fontWeight: 400, fontSize: 12, color: 'var(--muted)' }}>Summary email</th><th align="left" style={{ fontWeight: 400, fontSize: 12, color: 'var(--muted)' }}>Also notify</th><th></th></tr></thead><tbody>{locations.map(l => (
           <tr key={l.id}><td>{l.name}</td><td className="muted">{l.code}</td>
-            <td><input type="email" placeholder="store@nuway.com.au" defaultValue={l.email || ''} style={{ width: 210 }}
+            <td><input type="email" placeholder="store@nuway.com.au" defaultValue={l.email || ''} style={{ width: 200 }}
               onBlur={async e => { const v = e.target.value.trim(); await supabase.from('locations').update({ email: v || null }).eq('id', l.id) }} /></td>
+            <td><input type="email" placeholder="also notify (optional)" defaultValue={l.email2 || ''} style={{ width: 200 }}
+              onBlur={async e => { const v = e.target.value.trim(); await supabase.from('locations').update({ email2: v || null }).eq('id', l.id) }} /></td>
             <td style={{ textAlign: 'right' }}>
               <button className={`small ${l.active ? 'secondary' : ''}`} onClick={async () => { await supabase.from('locations').update({ active: !l.active }).eq('id', l.id); load() }}>{l.active ? 'Active' : 'Inactive'}</button>
             </td></tr>))}</tbody></table>
