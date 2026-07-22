@@ -15,6 +15,16 @@ function defaultBlock(type) {
   return null
 }
 
+// Keeps the raw text while typing (so spaces aren't stripped mid-word) and
+// parses into an options array for storage.
+function OptionsInput({ options, onChange }) {
+  const [text, setText] = useState((options || []).join(', '))
+  return (
+    <input value={text} placeholder="Option 1, Option 2, Option 3"
+      onChange={e => { setText(e.target.value); onChange(e.target.value.split(',').map(x => x.trim()).filter(Boolean)) }} />
+  )
+}
+
 export default function FormBuilder({ pages, onChange }) {
   const [openS, setOpenS] = useState(0)
 
@@ -91,7 +101,7 @@ export default function FormBuilder({ pages, onChange }) {
                       </div>
                       {b.input === 'select' && (
                         <div><label>Dropdown options (comma-separated)</label>
-                          <input value={(b.options || []).join(', ')} onChange={e => updateBlock(si, bi, { options: e.target.value.split(',').map(x => x.trim()).filter(Boolean) })} placeholder="Option 1, Option 2, Option 3" /></div>
+                          <OptionsInput key={b.name} options={b.options} onChange={opts => updateBlock(si, bi, { options: opts })} /></div>
                       )}
                       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400, marginTop: 6 }}>
                         <input type="checkbox" style={{ width: 'auto' }} checked={!!b.required} onChange={e => updateBlock(si, bi, { required: e.target.checked })} /> Required
