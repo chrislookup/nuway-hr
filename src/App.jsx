@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
-import { supabase } from './lib/supabase'
+import { supabase, IS_RECOVERY } from './lib/supabase'
 import Login from './pages/Login'
 import SetPassword from './pages/SetPassword'
 import Mfa from './pages/Mfa'
@@ -18,13 +18,14 @@ import PreEmployment from './pages/PreEmployment'
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
-  const [recovery, setRecovery] = useState(false)
+  const [recovery, setRecovery] = useState(IS_RECOVERY)
   const [reload, setReload] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
   const [mfa, setMfa] = useState(undefined) // undefined=checking, null=cleared, 'enroll'|'challenge'
   const [mfaReload, setMfaReload] = useState(0)
 
   useEffect(() => {
+    if ((window.location.hash + window.location.search).includes('type=recovery')) setRecovery(true)
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === 'PASSWORD_RECOVERY') setRecovery(true)
