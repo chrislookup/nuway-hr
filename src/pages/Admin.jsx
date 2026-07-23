@@ -257,6 +257,29 @@ function Documents({ profile }) {
             <div style={{ flex: 1 }}><label>Title</label><input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} /></div>
           </div>
           <div className="row">
+            <div style={{ flex: 1 }}><label>Appears in</label>
+              <select value={edit.library || ''} onChange={e => setEdit({ ...edit, library: e.target.value || null })}>
+                <option value="">Documents — assigned & tracked (shows on dashboards)</option>
+                <option value="form">Forms library — staff fill & send (not tracked, not on dashboard)</option>
+                <option value="resource">Resources library — view only (not tracked, not on dashboard)</option>
+              </select>
+            </div>
+          </div>
+          {edit.library && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0' }}>Library items never create to-dos or appear on the employee dashboard. The role/store filters below control who can <b>see</b> it.</p>}
+          {edit.library === 'form' && (
+            <div style={{ marginTop: 10 }}>
+              <label>Recipients <span className="muted" style={{ fontWeight: 400 }}>(when staff send this form they pick one; give each a label and the email it goes to)</span></label>
+              {(edit.recipients || []).map((rc, i) => (
+                <div className="row" key={i} style={{ gap: 8, marginBottom: 6 }}>
+                  <input style={{ flex: 1 }} placeholder="Label / position (e.g. Area Manager)" value={rc.label || ''} onChange={e => { const r = [...(edit.recipients || [])]; r[i] = { ...r[i], label: e.target.value }; setEdit({ ...edit, recipients: r }) }} />
+                  <input style={{ flex: 1 }} type="email" placeholder="email@nuway.com.au" value={rc.email || ''} onChange={e => { const r = [...(edit.recipients || [])]; r[i] = { ...r[i], email: e.target.value }; setEdit({ ...edit, recipients: r }) }} />
+                  <button type="button" className="danger small" onClick={() => setEdit({ ...edit, recipients: (edit.recipients || []).filter((_, j) => j !== i) })}>Remove</button>
+                </div>
+              ))}
+              <button type="button" className="small secondary" onClick={() => setEdit({ ...edit, recipients: [...(edit.recipients || []), { label: '', email: '' }] })}>+ Add recipient</button>
+            </div>
+          )}
+          <div className="row">
             <div style={{ flex: 1 }}><label>Category</label>
               <select value={edit.category_id || ''} onChange={e => setEdit({ ...edit, category_id: e.target.value })}>
                 {cats.map(c => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}
