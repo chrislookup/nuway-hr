@@ -14,6 +14,7 @@ import AssessDoc from './pages/AssessDoc'
 import Admin from './pages/Admin'
 import StoreSettings from './pages/StoreSettings'
 import PreEmployment from './pages/PreEmployment'
+import Library from './pages/Library'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -103,6 +104,8 @@ export default function App() {
           </div>
           <nav>
             <NavLink to="/" end>My Dashboard</NavLink>
+            <NavLink to="/forms">Forms</NavLink>
+            <NavLink to="/resources">Resources</NavLink>
             {isMgr && <NavLink to="/team">Team{reviewCount > 0 && <span className="navbadge">{reviewCount}</span>}</NavLink>}
             {isMgr && <NavLink to="/pre-employment">Pre-employment</NavLink>}
             {isMgr && <NavLink to="/new-hire">New Hire</NavLink>}
@@ -115,6 +118,8 @@ export default function App() {
         <div className="main">
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />
+            <Route path="/forms" element={<Library profile={profile} kind="form" />} />
+            <Route path="/resources" element={<Library profile={profile} kind="resource" />} />
             <Route path="/doc/:assignmentId" element={<CompleteDoc profile={profile} />} />
             <Route path="/record/:assignmentId" element={<SignedRecord />} />
             <Route path="/assess/:assignmentId" element={<AssessDoc profile={profile} />} />
