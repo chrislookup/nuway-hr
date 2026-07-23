@@ -128,6 +128,7 @@ export default function Library({ profile, kind }) {
           <div className="success" style={{ marginTop: 12 }}>Sent to {recips[recipIdx]?.label || recips[recipIdx]?.email}. A copy has been emailed to you{profile.email ? ` (${profile.email})` : ''}.</div>
         ) : isForm ? (
           <>
+          {open.doc.allow_attachments !== false && (
           <div className="card" style={{ marginTop: 12 }}>
             <label>Attach photos or files <span className="muted" style={{ fontWeight: 400 }}>(optional — e.g. receipts. On a phone you can take a photo. They're combined into one PDF and attached.)</span></label>
             <input type="file" accept="image/*,application/pdf" multiple onChange={e => { setFiles([...files, ...Array.from(e.target.files || [])]); e.target.value = '' }} />
@@ -137,6 +138,7 @@ export default function Library({ profile, kind }) {
               </ul>
             )}
           </div>
+          )}
           <div className="card" style={{ marginTop: 12 }}>
             <h2>Send this form</h2>
             {recips.length === 0 && <p className="muted">No recipient has been set up for this form yet.</p>}

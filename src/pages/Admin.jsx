@@ -268,7 +268,11 @@ function Documents({ profile }) {
           {edit.library && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0' }}>Library items never create to-dos or appear on the employee dashboard. The role/store filters below control who can <b>see</b> it.</p>}
           {edit.library === 'form' && (
             <div style={{ marginTop: 10 }}>
-              <label>Recipients <span className="muted" style={{ fontWeight: 400 }}>(when staff send this form they pick one; give each a label and the email it goes to)</span></label>
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={edit.allow_attachments !== false} onChange={e => setEdit({ ...edit, allow_attachments: e.target.checked })} />
+                Let staff attach photos / files when sending this form
+              </label>
+              <label style={{ marginTop: 10 }}>Recipients <span className="muted" style={{ fontWeight: 400 }}>(when staff send this form they pick one; give each a label and the email it goes to)</span></label>
               {(edit.recipients || []).map((rc, i) => (
                 <div className="row" key={i} style={{ gap: 8, marginBottom: 6 }}>
                   <input style={{ flex: 1 }} placeholder="Label / position (e.g. Area Manager)" value={rc.label || ''} onChange={e => { const r = [...(edit.recipients || [])]; r[i] = { ...r[i], label: e.target.value }; setEdit({ ...edit, recipients: r }) }} />
