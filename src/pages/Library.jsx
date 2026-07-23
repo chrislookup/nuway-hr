@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import FormRenderer, { validateGuided } from '../components/FormRenderer'
 
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
+function bytesToB64(bytes) { let bin = ''; const chunk = 0x8000; for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)); return btoa(bin) }
 
 function formToHtml(schema, values, title, sender) {
   let rows = ''
@@ -34,9 +35,10 @@ export default function Library({ profile, kind }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [sent, setSent] = useState(false)
+  const [files, setFiles] = useState([])
 
   useEffect(() => {
-    setOpen(null); setSent(false); setMsg(''); setValues({}); setPdfUrl(''); setRecipIdx(0)
+    setOpen(null); setSent(false); setMsg(''); setValues({}); setPdfUrl(''); setRecipIdx(0); setFiles([])
     ;(async () => {
       setLoading(true)
       const { data: rr } = await supabase.from('employee_job_roles').select('job_roles(name)').eq('employee_id', profile.id)
@@ -53,7 +55,7 @@ export default function Library({ profile, kind }) {
   }, [kind, profile])
 
   async function openItem(doc) {
-    setMsg(''); setSent(false); setValues({}); setRecipIdx(0); setPdfUrl('')
+    setMsg(''); setSent(false); setValues({}); setRecipIdx(0); setPdfUrl(''); setFiles([])
     let version = null
     if (doc.current_version_id) {
       const { data: v } = await supabase.from('document_versions').select('*').eq('id', doc.current_version_id).single()
@@ -86,9 +88,15 @@ export default function Library({ profile, kind }) {
     setBusy(true)
     const html = guided ? formToHtml(open.version.form_schema, values, open.doc.title, senderName)
       : `<div style="font-family:Arial,sans-serif"><p>${esc(senderName)} has submitted the form <b>${esc(open.doc.title)}</b>.</p></div>`
+    let attB64 = null, attName = null
+    if (files.length) {
+      try { const { filesToPdf } = await import('../lib/filesToPdf'); const bytes = await filesToPdf(files); attB64 = bytesToB64(bytes); attName = `${open.doc.title} - attachments.pdf` }
+      catch (e) { setBusy(false); setMsg('Could not process the attached files: ' + (e.message || e)); return }
+    }
     const { error } = await supabase.rpc('send_form_email', {
       p_to: to.email, p_to_label: to.label || '', p_subject: `${open.doc.title}${to.label ? ` — ${to.label}` : ''} — Nuway HR`,
       p_html: html, p_confirm_to: profile.email || '', p_form_title: open.doc.title,
+      p_attach_b64: attB64, p_attach_name: attName,
     })
     setBusy(false)
     if (error) setMsg('Could not send: ' + error.message)
@@ -119,6 +127,16 @@ export default function Library({ profile, kind }) {
         {sent ? (
           <div className="success" style={{ marginTop: 12 }}>Sent to {recips[recipIdx]?.label || recips[recipIdx]?.email}. A copy has been emailed to you{profile.email ? ` (${profile.email})` : ''}.</div>
         ) : isForm ? (
+          <>
+          <div className="card" style={{ marginTop: 12 }}>
+            <label>Attach photos or files <span className="muted" style={{ fontWeight: 400 }}>(optional — e.g. receipts. On a phone you can take a photo. They're combined into one PDF and attached.)</span></label>
+            <input type="file" accept="image/*,application/pdf" multiple onChange={e => { setFiles([...files, ...Array.from(e.target.files || [])]); e.target.value = '' }} />
+            {files.length > 0 && (
+              <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                {files.map((fl, i) => <li key={i} style={{ fontSize: 13 }}>{fl.name} <button type="button" className="small danger" style={{ marginLeft: 6 }} onClick={() => setFiles(files.filter((_, j) => j !== i))}>Remove</button></li>)}
+              </ul>
+            )}
+          </div>
           <div className="card" style={{ marginTop: 12 }}>
             <h2>Send this form</h2>
             {recips.length === 0 && <p className="muted">No recipient has been set up for this form yet.</p>}
@@ -135,6 +153,7 @@ export default function Library({ profile, kind }) {
               <button className="secondary" onClick={printForm}>Print</button>
             </div>
           </div>
+          </>
         ) : (
           <div className="row" style={{ marginTop: 12 }}>
             <button className="secondary" onClick={printForm}>Print / open</button>
