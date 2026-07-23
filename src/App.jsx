@@ -118,8 +118,8 @@ export default function App() {
         <div className="main">
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />
-            <Route path="/forms" element={<Library profile={profile} kind="form" />} />
-            <Route path="/resources" element={<Library profile={profile} kind="resource" />} />
+            <Route path="/forms" element={<Library key="form" profile={profile} kind="form" />} />
+            <Route path="/resources" element={<Library key="resource" profile={profile} kind="resource" />} />
             <Route path="/doc/:assignmentId" element={<CompleteDoc profile={profile} />} />
             <Route path="/record/:assignmentId" element={<SignedRecord />} />
             <Route path="/assess/:assignmentId" element={<AssessDoc profile={profile} />} />

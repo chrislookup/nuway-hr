@@ -36,7 +36,8 @@ export default function Library({ profile, kind }) {
   const [sent, setSent] = useState(false)
 
   useEffect(() => {
-    (async () => {
+    setOpen(null); setSent(false); setMsg(''); setValues({}); setPdfUrl(''); setRecipIdx(0)
+    ;(async () => {
       setLoading(true)
       const { data: rr } = await supabase.from('employee_job_roles').select('job_roles(name)').eq('employee_id', profile.id)
       const myRoles = (rr || []).map(r => r.job_roles?.name).filter(Boolean)
