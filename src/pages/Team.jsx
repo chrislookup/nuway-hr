@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
+import { suggestInductions } from '../lib/inductions'
 
 export default function Team({ profile }) {
   const [people, setPeople] = useState(null)
   const [reviews, setReviews] = useState([])
   const [busyId, setBusyId] = useState(null)
   const [rej, setRej] = useState({ id: null, reason: '' })
+  const [gaps, setGaps] = useState([])
 
   async function load() {
     const { data: profs } = await supabase.from('profiles')
@@ -30,6 +32,32 @@ export default function Team({ profile }) {
       .select('*, documents(code, title), profiles!assignments_employee_id_fkey(first_name, last_name)')
       .eq('status', 'awaiting_review').order('completed_at', { ascending: false })
     setReviews(rev || [])
+
+    // who is missing a vehicle induction they look like they need?
+    if (ids.length) {
+      const [{ data: els }, { data: vehs }, { data: lics }, { data: vAsg }] = await Promise.all([
+        supabase.from('employee_locations').select('employee_id, location_id').in('employee_id', ids),
+        supabase.from('vehicles').select('id, rego, type, induction_document_id, location_id').eq('active', true),
+        supabase.from('licences').select('employee_id, licence_class, licence_types(name)').in('employee_id', ids).eq('active', true),
+        supabase.from('assignments').select('employee_id, vehicle_id').in('employee_id', ids).not('vehicle_id', 'is', null),
+      ])
+      const locsBy = {}, licBy = {}, asgBy = {}
+      for (const x of els || []) (locsBy[x.employee_id] = locsBy[x.employee_id] || []).push(x.location_id)
+      for (const x of lics || []) (licBy[x.employee_id] = licBy[x.employee_id] || []).push(x)
+      for (const x of vAsg || []) (asgBy[x.employee_id] = asgBy[x.employee_id] || []).push(x.vehicle_id)
+      const out = []
+      for (const p of profs || []) {
+        const myLocs = locsBy[p.id] || []
+        const sug = suggestInductions({
+          roles: (p.employee_job_roles || []).map(r => r.job_roles?.name).filter(Boolean),
+          licences: licBy[p.id] || [],
+          vehicles: (vehs || []).filter(v => myLocs.includes(v.location_id)),
+          assignedVehicleIds: asgBy[p.id] || [],
+        })
+        if (sug.length) out.push({ person: p, sug })
+      }
+      setGaps(out)
+    }
   }
   useEffect(() => { load() }, [])
 
@@ -57,6 +85,26 @@ export default function Team({ profile }) {
   return (
     <div>
       <h1>Team</h1>
+      {gaps.length > 0 && (
+        <div className="card" style={{ borderLeft: '4px solid var(--teal)' }}>
+          <h2>Vehicle inductions to assign ({gaps.length})</h2>
+          <p className="muted" style={{ fontSize: 13 }}>
+            These staff have roles or licences that suggest they'll operate machinery, but haven't been inducted on it.
+            Open the person to assign the machines they'll actually use.
+          </p>
+          <table><tbody>
+            {gaps.map(({ person, sug }) => (
+              <tr key={person.id}>
+                <td><Link to={`/employee/${person.id}`}>{person.first_name} {person.last_name}</Link></td>
+                <td className="muted">{[...new Set(sug.map(x => x.vehicle.type))].join(', ')} — {sug.length} machine{sug.length > 1 ? 's' : ''}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{sug[0].reason}</td>
+                <td style={{ textAlign: 'right' }}><Link to={`/employee/${person.id}`}><button className="small">Review</button></Link></td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
+
       {reviews.length > 0 && (
         <div className="card">
           <h2>Awaiting your sign-off ({reviews.length})</h2>

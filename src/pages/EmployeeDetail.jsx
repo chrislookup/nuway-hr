@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase, fmtDate, byCatRank, loadCatOrder } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import LicenceForm from '../components/LicenceForm'
+import { suggestInductions } from '../lib/inductions'
 
 export default function EmployeeDetail({ profile }) {
   const { id } = useParams()
@@ -51,6 +52,18 @@ export default function EmployeeDetail({ profile }) {
     setAllRoles(ar || [])
   }
   useEffect(() => { load() }, [id])
+
+  async function assignInductions(list) {
+    const rows = list.filter(v => v.induction_document_id).map(v => ({
+      employee_id: id, document_id: v.induction_document_id, vehicle_id: v.id,
+      source: 'manual', assigned_by: profile.id,
+      due_date: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10),
+    }))
+    if (!rows.length) { setMsg('Those vehicles have no induction form attached (set the type in Store settings).'); return }
+    const { error } = await supabase.from('assignments').insert(rows)
+    setMsg(error ? error.message : `${rows.length} vehicle induction${rows.length > 1 ? 's' : ''} assigned.`)
+    load()
+  }
 
   async function addVehicleInduction() {
     const v = storeVehicles.find(x => x.id === addVeh)
@@ -196,6 +209,12 @@ export default function EmployeeDetail({ profile }) {
   const vehByVeh = {}
   for (const a of assignments) { if (a.vehicle_id) { (vehByVeh[a.vehicle_id] = vehByVeh[a.vehicle_id] || []).push(a) } }
   const vehInd = Object.values(vehByVeh).map(list => { list.sort((x, y) => new Date(y.assigned_at) - new Date(x.assigned_at)); return list[0] })
+  const suggested = emp ? suggestInductions({
+    roles: (emp.employee_job_roles || []).map(r => r.job_roles?.name).filter(Boolean),
+    licences,
+    vehicles: storeVehicles,
+    assignedVehicleIds: assignments.filter(a => a.vehicle_id).map(a => a.vehicle_id),
+  }) : []
   for (const a of assignments) { if (a.vehicle_id) continue; (byDoc[a.document_id] = byDoc[a.document_id] || []).push(a) }
   const current = [], superseded = []
   for (const list of Object.values(byDoc)) {
@@ -320,6 +339,27 @@ export default function EmployeeDetail({ profile }) {
           </div>
         </div>
         <p className="muted" style={{ fontSize: 12 }}>Pick which vehicles at this person's store(s) they must be inducted on. Each includes the vehicle's risk assessment (read &amp; sign) and the machine induction form.</p>
+        {suggested.length > 0 && (
+          <div className="ackbox" style={{ margin: '10px 0', borderLeft: '4px solid var(--teal)' }}>
+            <b>Suggested for {emp.first_name}</b>
+            <p className="muted" style={{ fontSize: 13, margin: '4px 0 8px' }}>
+              Based on their roles and licences. Only assign the machines they'll actually operate.
+            </p>
+            <table style={{ fontSize: 13 }}><tbody>
+              {suggested.map(({ vehicle, reason }) => (
+                <tr key={vehicle.id}>
+                  <td><b>{vehicle.type} {vehicle.rego}</b></td>
+                  <td className="muted">{emp.first_name} {reason}</td>
+                  <td style={{ textAlign: 'right' }}><button className="small" onClick={() => assignInductions([vehicle])}>Assign</button></td>
+                </tr>
+              ))}
+            </tbody></table>
+            {suggested.length > 1 && (
+              <button className="small secondary" style={{ marginTop: 8 }}
+                onClick={() => assignInductions(suggested.map(s => s.vehicle))}>Assign all {suggested.length}</button>
+            )}
+          </div>
+        )}
         {vehInd.length === 0
           ? <p className="muted">No vehicle inductions assigned.</p>
           : <table className="matrix"><tbody>
