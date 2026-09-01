@@ -9,6 +9,7 @@ export default function Team({ profile }) {
   const [busyId, setBusyId] = useState(null)
   const [rej, setRej] = useState({ id: null, reason: '' })
   const [gaps, setGaps] = useState([])
+  const [mine, setMine] = useState([])
   const [sort, setSort] = useState({ key: 'name', dir: 1 })
   const [filterLoc, setFilterLoc] = useState('')
   const [filterRole, setFilterRole] = useState('')
@@ -34,7 +35,9 @@ export default function Team({ profile }) {
     const { data: rev } = await supabase.from('assignments')
       .select('*, documents(code, title), profiles!assignments_employee_id_fkey(first_name, last_name)')
       .eq('status', 'awaiting_review').order('completed_at', { ascending: false })
-    setReviews(rev || [])
+    // nobody signs off their own paperwork — my own submissions wait for someone else
+    setReviews((rev || []).filter(a => a.employee_id !== profile.id))
+    setMine((rev || []).filter(a => a.employee_id === profile.id))
 
     // who is missing a vehicle induction they look like they need?
     if (ids.length) {
@@ -65,9 +68,13 @@ export default function Team({ profile }) {
   useEffect(() => { load() }, [])
 
   async function signOff(a) {
+    if (a.employee_id === profile.id) return
     setBusyId(a.id)
-    await supabase.from('completions').update({ verified_by: profile.id, verified_at: new Date().toISOString() }).eq('assignment_id', a.id)
-    await supabase.from('assignments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', a.id)
+    const { error: ce } = await supabase.from('completions')
+      .update({ verified_by: profile.id, verified_at: new Date().toISOString() }).eq('assignment_id', a.id)
+    const { error: ae } = ce ? {} : await supabase.from('assignments')
+      .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', a.id)
+    if (ce || ae) window.alert((ce || ae).message)
     await load()
     setBusyId(null)
   }
@@ -122,6 +129,25 @@ export default function Team({ profile }) {
   return (
     <div>
       <h1>Team</h1>
+      {mine.length > 0 && (
+        <div className="card">
+          <h2>Your own items ({mine.length})</h2>
+          <p className="muted" style={{ fontSize: 13 }}>
+            You've submitted these yourself, so they need someone else to sign them off — another manager
+            over your store, or head office. They'll stay here until then.
+          </p>
+          <table><tbody>
+            {mine.map(a => (
+              <tr key={a.id}>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td className="muted">submitted {fmtDate(a.completed_at)}</td>
+                <td><span className="badge awaiting_review">Awaiting someone else</span></td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
+
       {gaps.length > 0 && (
         <div className="card" style={{ borderLeft: '4px solid var(--teal)' }}>
           <h2>Vehicle inductions to assign ({gaps.length})</h2>
