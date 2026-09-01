@@ -39,7 +39,7 @@ export function fmtDate(d) {
 }
 
 export function isOverdue(a) {
-  return a.due_date && !a.suspended && !['completed', 'expired'].includes(a.status) && new Date(a.due_date) < new Date()
+  return a.due_date && !a.suspended && !['completed', 'expired', 'awaiting_review'].includes(a.status) && new Date(a.due_date) < new Date()
 }
 
 export const CAT_ORDER = {

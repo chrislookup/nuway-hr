@@ -55,7 +55,8 @@ export default function Dashboard({ profile }) {
   const done = current.filter(a => a.status === 'completed').length
   const overdue = current.filter(isOverdue).length
   const awaiting = current.filter(a => a.status === 'awaiting_review').length
-  const open = current.filter(a => !['completed', 'expired'].includes(a.status) && !a.suspended)
+  const open = current.filter(a => !['completed', 'expired', 'awaiting_review'].includes(a.status) && !a.suspended)
+  const waiting = current.filter(a => a.status === 'awaiting_review')
   const pct = current.length ? Math.round(done / current.length * 100) : 0
 
   const groupByCat = (list) => {
@@ -125,6 +126,22 @@ export default function Dashboard({ profile }) {
           </tbody>
         </table>
       </div>
+
+      {waiting.length > 0 && (
+        <div className="card">
+          <h2>Submitted — waiting on manager sign-off ({waiting.length})</h2>
+          <p className="muted" style={{ fontSize: 13 }}>You've done your part on these. They'll move to your completed records once your manager signs off — nothing more for you to do.</p>
+          <table className="listgrouped"><tbody>
+            {waiting.map(a => (
+              <tr key={a.id}>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td className="col-status"><StatusBadge assignment={a} /></td>
+                <td className="col-act"><Link to={`/record/${a.id}`}>View / print</Link></td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div>
+      )}
 
       <div className="card">
         <h2>To do ({open.length})</h2>

@@ -21,7 +21,7 @@ export default function Team({ profile }) {
         stats[a.employee_id] = stats[a.employee_id] || { total: 0, done: 0, overdue: 0 }
         stats[a.employee_id].total++
         if (a.status === 'completed') stats[a.employee_id].done++
-        else if (a.due_date && new Date(a.due_date) < new Date()) stats[a.employee_id].overdue++
+        else if (a.status !== 'awaiting_review' && a.due_date && new Date(a.due_date) < new Date()) stats[a.employee_id].overdue++
       }
     }
     setPeople((profs || []).map(p => ({ ...p, stats: stats[p.id] || { total: 0, done: 0, overdue: 0 } })))
