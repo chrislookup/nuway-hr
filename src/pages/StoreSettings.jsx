@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import PlantLicenceRegister from '../components/PlantLicenceRegister'
 
 const TYPES = ['Truck', 'Loader', 'Forklift']
 
@@ -14,6 +15,7 @@ export default function StoreSettings({ profile }) {
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const [indMap, setIndMap] = useState({})
+  const [tab, setTab] = useState('register')
 
   async function load() {
     const { data: l } = await supabase.from('locations').select('*').eq('active', true).order('name')
@@ -87,9 +89,20 @@ export default function StoreSettings({ profile }) {
   const byLoc = {}
   for (const v of shownVehicles) { const n = v.locations?.name || 'Unassigned'; (byLoc[n] = byLoc[n] || []).push(v) }
 
+  const allowedIds = isAdmin ? null : myLocs
+
   return (
     <div>
-      <h1>Store settings — vehicles</h1>
+      <h1>Store</h1>
+      <div className="pill-tabs">
+        <button className={tab === 'register' ? 'on' : ''} onClick={() => setTab('register')}>Plant licence register</button>
+        <button className={tab === 'vehicles' ? 'on' : ''} onClick={() => setTab('vehicles')}>Vehicles</button>
+      </div>
+
+      {tab === 'register' && <PlantLicenceRegister profile={profile} locations={locations} allowedLocIds={allowedIds} />}
+
+      <div style={{ display: tab === 'vehicles' ? 'block' : 'none' }}>
+      <h2>Vehicles</h2>
       <p className="muted">Register the trucks, forklifts and loaders at each store, and upload each vehicle’s risk assessment. The right induction form is attached automatically by type. Inductions are then assigned to specific staff from their profile.</p>
 
       <div className="card">
@@ -151,6 +164,7 @@ export default function StoreSettings({ profile }) {
         </div>
       ))}
       {shownVehicles.length === 0 && <p className="muted">No vehicles registered yet.</p>}
+      </div>
     </div>
   )
 }
