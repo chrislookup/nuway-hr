@@ -9,6 +9,9 @@ export default function Team({ profile }) {
   const [busyId, setBusyId] = useState(null)
   const [rej, setRej] = useState({ id: null, reason: '' })
   const [gaps, setGaps] = useState([])
+  const [sort, setSort] = useState({ key: 'name', dir: 1 })
+  const [filterLoc, setFilterLoc] = useState('')
+  const [filterRole, setFilterRole] = useState('')
 
   async function load() {
     const { data: profs } = await supabase.from('profiles')
@@ -82,6 +85,40 @@ export default function Team({ profile }) {
 
   if (!people) return <p className="muted">Loading…</p>
 
+  const locsOf = p => (p.employee_locations || []).map(l => l.locations?.name).filter(Boolean).sort()
+  const rolesOf = p => (p.employee_job_roles || []).map(r => r.job_roles?.name).filter(Boolean).sort()
+  const allLocations = [...new Set((people || []).flatMap(locsOf))].sort()
+  const allRoles = [...new Set((people || []).flatMap(rolesOf))].sort()
+
+  // someone at several stores sorts under their first store alphabetically, and shows under each in the filter
+  const sortKey = {
+    name: p => `${p.first_name} ${p.last_name || ''}`.toLowerCase(),
+    location: p => locsOf(p)[0]?.toLowerCase() ?? 'zzz',
+    roles: p => rolesOf(p)[0]?.toLowerCase() ?? 'zzz',
+    start: p => p.start_date || '',
+    progress: p => (p.stats.total ? p.stats.done / p.stats.total : -1),
+    overdue: p => p.stats.overdue,
+  }
+  const shownPeople = (people || [])
+    .filter(p => !filterLoc || locsOf(p).includes(filterLoc))
+    .filter(p => !filterRole || rolesOf(p).includes(filterRole))
+    .slice()
+    .sort((a, b) => {
+      const f = sortKey[sort.key] || sortKey.name
+      const x = f(a), y = f(b)
+      if (x < y) return -1 * sort.dir
+      if (x > y) return 1 * sort.dir
+      return sortKey.name(a) < sortKey.name(b) ? -1 : 1
+    })
+
+  const Th = ({ k, children }) => (
+    <th onClick={() => setSort(s => ({ key: k, dir: s.key === k ? -s.dir : 1 }))}
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+      title="Sort by this column">
+      {children}{sort.key === k ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
+
   return (
     <div>
       <h1>Team</h1>
@@ -135,15 +172,31 @@ export default function Team({ profile }) {
         </div>
       )}
       <div className="card">
-        <h2>Employees ({people.length})</h2>
+        <div className="row between" style={{ flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0 }}>Employees ({shownPeople.length}{shownPeople.length !== people.length ? ` of ${people.length}` : ''})</h2>
+          <div className="row" style={{ gap: 8 }}>
+            <select style={{ width: 160 }} value={filterLoc} onChange={e => setFilterLoc(e.target.value)}>
+              <option value="">All locations</option>
+              {allLocations.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <select style={{ width: 140 }} value={filterRole} onChange={e => setFilterRole(e.target.value)}>
+              <option value="">All roles</option>
+              {allRoles.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+        </div>
         <table>
-          <thead><tr><th>Name</th><th>Location</th><th>Roles</th><th>Progress</th><th>Overdue</th><th /></tr></thead>
+          <thead><tr>
+            <Th k="name">Name</Th><Th k="location">Location</Th><Th k="roles">Roles</Th>
+            <Th k="start">Started</Th><Th k="progress">Progress</Th><Th k="overdue">Overdue</Th><th />
+          </tr></thead>
           <tbody>
-            {people.map(p => (
+            {shownPeople.map(p => (
               <tr key={p.id}>
                 <td><Link to={`/employee/${p.id}`}>{p.first_name} {p.last_name}</Link></td>
                 <td>{(p.employee_locations || []).map(l => l.locations?.name).join(', ') || '—'}</td>
                 <td>{(p.employee_job_roles || []).map(r => r.job_roles?.name).join(', ') || '—'}</td>
+                <td className="muted">{p.start_date ? fmtDate(p.start_date) : '—'}</td>
                 <td><div className="progressbar"><div style={{ width: `${p.stats.total ? p.stats.done / p.stats.total * 100 : 0}%` }} /></div>
                   <span className="muted">{p.stats.done}/{p.stats.total}</span></td>
                 <td>{p.stats.overdue > 0 ? <span className="badge overdue">{p.stats.overdue}</span> : '—'}</td>
