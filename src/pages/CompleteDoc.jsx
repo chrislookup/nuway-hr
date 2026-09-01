@@ -78,6 +78,7 @@ export default function CompleteDoc({ profile }) {
   const hasAssessor = assessorIdx.length > 0
   const pdfFields = version?.pdf_field_map || []
   const isPdfForm = doc.doc_type === 'pdf_form' && pdfFields.length > 0 && !!pdfUrl
+  const showAgree = needsSig && !guided && !isPdfForm && !isStandard && ackList.length === 0
   const empFields = pdfFields.filter(f => f.signer === 'employee')
   const compFields = pdfFields.filter(f => f.signer === 'competent')
 
@@ -89,7 +90,7 @@ export default function CompleteDoc({ profile }) {
       if (f.type === 'checkbox' ? !val : (!val || (typeof val === 'string' && !val.trim()))) { setErr('Please complete all required fields on the form (marked *).'); return }
     }
     if (needsSig && !signedName.trim()) { setErr('Please type your full name to sign.'); return }
-    if (needsSig && !agree) { setErr('Please tick the acknowledgement box.'); return }
+    if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
     if (ackList.length && ackList.some((_, i) => !acks[i])) { setErr('Please tick all the acknowledgement statements to confirm.'); return }
     if (compFields.length) {
       for (const f of compFields) { if (!f.required) continue; const val = pdfVals[f.id]; if (f.type === 'checkbox' ? !val : (!val || (typeof val === 'string' && !val.trim()))) { setErr('The competent person still needs to complete their fields (marked *). Not available now? Use “Save draft” and come back.'); return } }
@@ -157,7 +158,6 @@ export default function CompleteDoc({ profile }) {
     if (needsRead && !opened) { setErr('Please open and read the document first (use the “Open full screen” button).'); return }
     if (raUrl && !raAck) { setErr('Please read and tick to acknowledge the vehicle risk assessment.'); return }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
-    const showAgree = needsSig && !guided && !isPdfForm && !isStandard
     if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
     if (ackList.length && ackList.some((_, i) => !acks[i])) { setErr('Please tick all the acknowledgement statements to confirm.'); return }
     for (const pi of assessorIdx) { if (!values[`cp_${pi}_sig`] || !String(values[`cp_${pi}_name`] || '').trim()) { setErr('Each competent-person section needs the competent person’s name and signature.'); return } }
@@ -360,7 +360,7 @@ export default function CompleteDoc({ profile }) {
         <div className="card">
           {needsSig && (<>
             <h2>Sign &amp; acknowledge</h2>
-            {needsSig && !guided && !isPdfForm && !isStandard && (
+            {showAgree && (
               <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400 }}>
                 <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={agree} onChange={e => setAgree(e.target.checked)} />
                 I confirm I have read and understood this document, and my electronic signature below is my agreement to comply with it.
