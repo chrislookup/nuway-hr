@@ -266,6 +266,19 @@ function Documents({ profile }) {
               </select>
             </div>
           </div>
+          {edit.library && (
+            <div className="row" style={{ marginTop: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label>Section / sub-heading <span className="muted" style={{ fontWeight: 400 }}>(groups this item in the library — leave blank for “General”)</span></label>
+                <input list="library-sections" value={edit.library_section || ''}
+                  onChange={e => setEdit({ ...edit, library_section: e.target.value || null })}
+                  placeholder="e.g. Health & Wellbeing, Store Operations, Safe Work Procedures" />
+                <datalist id="library-sections">
+                  {[...new Set(docs.map(d => d.library_section).filter(Boolean))].sort().map(x => <option key={x} value={x} />)}
+                </datalist>
+              </div>
+            </div>
+          )}
           {edit.library && <p className="muted" style={{ fontSize: 12, margin: '2px 0 0' }}>Library items never create to-dos or appear on the employee dashboard. The role/store filters below control who can <b>see</b> it.</p>}
           {edit.library === 'form' && (
             <div style={{ marginTop: 10 }}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import FormRenderer, { validateGuided } from '../components/FormRenderer'
 
@@ -27,6 +27,7 @@ function formToHtml(schema, values, title, sender) {
 export default function Library({ profile, kind }) {
   const isForm = kind === 'form'
   const [items, setItems] = useState([])
+  const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(null)      // { doc, version }
   const [values, setValues] = useState({})
@@ -169,19 +170,38 @@ export default function Library({ profile, kind }) {
     <div>
       <h1>{isForm ? 'Forms' : 'Procedures & Resources'}</h1>
       <p className="muted">{isForm ? 'Fill in and send, or print. These are not tracked on your dashboard.' : 'Reference documents to view and print. Not tracked or required.'}</p>
+      {!loading && items.length > 3 && (
+        <input style={{ maxWidth: 320, marginBottom: 14 }} placeholder="Search by name or number…"
+          value={q} onChange={e => setQ(e.target.value)} />
+      )}
       {loading ? <p className="muted">Loading…</p> : items.length === 0 ? (
         <p className="muted">Nothing here yet.</p>
-      ) : (
-        <div className="card"><table><tbody>
-          {items.map(d => (
-            <tr key={d.id}>
-              <td className="muted" style={{ width: 90 }}>{d.code}</td>
-              <td>{d.title}</td>
-              <td style={{ textAlign: 'right' }}><button className="small" onClick={() => openItem(d)}>{isForm ? 'Open' : 'View'}</button></td>
-            </tr>
-          ))}
-        </tbody></table></div>
-      )}
+      ) : (() => {
+        const needle = q.trim().toLowerCase()
+        const shown = needle
+          ? items.filter(d => `${d.code || ''} ${d.title}`.toLowerCase().includes(needle))
+          : items
+        if (!shown.length) return <p className="muted">Nothing matches “{q}”.</p>
+        // group under sub-headings; anything without a section falls under General, shown last
+        const groups = {}
+        for (const d of shown) (groups[d.library_section?.trim() || 'General'] = groups[d.library_section?.trim() || 'General'] || []).push(d)
+        const names = Object.keys(groups).sort((a, b) =>
+          a === 'General' ? 1 : b === 'General' ? -1 : a.localeCompare(b))
+        return names.map(name => (
+          <div className="card" key={name}>
+            {(names.length > 1 || name !== 'General') && <h2 style={{ marginTop: 0 }}>{name}</h2>}
+            <table><tbody>
+              {groups[name].map(d => (
+                <tr key={d.id}>
+                  <td className="muted" style={{ width: 90 }}>{d.code}</td>
+                  <td>{d.title}</td>
+                  <td style={{ textAlign: 'right' }}><button className="small" onClick={() => openItem(d)}>{isForm ? 'Open' : 'View'}</button></td>
+                </tr>
+              ))}
+            </tbody></table>
+          </div>
+        ))
+      })()}
     </div>
   )
 }
