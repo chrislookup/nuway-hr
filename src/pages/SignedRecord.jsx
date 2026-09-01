@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
+import ImageViewer from '../components/ImageViewer'
 
 export default function SignedRecord() {
   const { assignmentId } = useParams()
@@ -13,6 +14,8 @@ export default function SignedRecord() {
   const [verifierSigUrl, setVerifierSigUrl] = useState(null)
   const [cpSigs, setCpSigs] = useState({})
   const [fileUrl, setFileUrl] = useState(null)
+  const [filePath, setFilePath] = useState(null)
+  const [viewing, setViewing] = useState(false)
   const [masterUrl, setMasterUrl] = useState(null)
   const [notfound, setNotfound] = useState(false)
 
@@ -33,7 +36,7 @@ export default function SignedRecord() {
       if (c?.verifier_signature_path) { const { data: vs } = await supabase.storage.from('signatures').createSignedUrl(c.verifier_signature_path, 3600); setVerifierSigUrl(vs?.signedUrl || null) }
       if (c?.verifier_data) { const map = {}; for (const [k, v] of Object.entries(c.verifier_data)) { if (v?.sig) { const { data: u } = await supabase.storage.from('signatures').createSignedUrl(v.sig, 3600); map[k] = u?.signedUrl || null } } setCpSigs(map) }
       const up = c?.completed_pdf_path || c?.form_data?.uploaded_file
-      if (up) { const { data: f } = await supabase.storage.from('completed-docs').createSignedUrl(up, 3600); setFileUrl(f?.signedUrl || null) }
+      if (up) { setFilePath(up); const { data: f } = await supabase.storage.from('completed-docs').createSignedUrl(up, 3600); setFileUrl(f?.signedUrl || null) }
     })()
   }, [assignmentId])
 
@@ -45,6 +48,7 @@ export default function SignedRecord() {
 
   return (
     <div>
+      {viewing && filePath && <ImageViewer bucket="completed-docs" path={filePath} title="Signed document" onClose={() => setViewing(false)} />}
       <div className="no-print row between" style={{ marginBottom: 10 }}>
         <a onClick={() => nav(-1)} style={{ cursor: 'pointer' }}>&larr; Back</a>
         <button className="small" onClick={() => window.print()}>🖨 Print / Save PDF</button>
@@ -109,7 +113,8 @@ export default function SignedRecord() {
           </tbody></table>
         )}
 
-        {fileUrl && <p className="no-print" style={{ marginTop: 16 }}><a href={fileUrl} target="_blank" rel="noreferrer">Open signed document (PDF) ↗</a></p>}
+        {filePath && <p className="no-print" style={{ marginTop: 16 }}>
+          <button className="small secondary" onClick={() => setViewing(true)}>Open signed document (PDF)</button></p>}
 
         <div className="record-sign">
           <h3>Electronic signature</h3>

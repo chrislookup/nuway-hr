@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmtDate, isOverdue, byCatRank, loadCatOrder } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
+import ImageViewer from '../components/ImageViewer'
 import LicenceForm from '../components/LicenceForm'
 
 export default function Dashboard({ profile }) {
@@ -15,10 +16,10 @@ export default function Dashboard({ profile }) {
   function loadLic() {
     supabase.from('licences').select('*, licence_types(name)').eq('employee_id', profile.id).eq('active', true).then(({ data }) => setLicences(data || []))
   }
-  async function viewImg(path) {
+  const [viewing, setViewing] = useState(null)
+  function viewImg(path, title) {
     if (!path) return
-    const { data } = await supabase.storage.from('licences').createSignedUrl(path, 3600)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    setViewing({ path, title })
   }
   function loadAssess() {
     supabase.from('assignments')
@@ -83,6 +84,7 @@ export default function Dashboard({ profile }) {
 
   return (
     <div>
+      {viewing && <ImageViewer path={viewing.path} title={viewing.title} onClose={() => setViewing(null)} />}
       <h1>G'day, {profile.first_name}</h1>
       <p className="muted">Your training &amp; compliance dashboard</p>
 
@@ -243,7 +245,7 @@ export default function Dashboard({ profile }) {
                     <td className="muted">{l.conditions || '—'}</td>
                     <td>{l.expiry_date ? <span className={soon ? 'badge overdue' : ''}>{fmtDate(l.expiry_date)}</span> : '—'}</td>
                     <td>{l.verified_at ? <span className="badge completed">Verified</span> : <span className="badge awaiting_review">Awaiting check</span>}</td>
-                    <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
+                    <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path, `${l.licence_types?.name || 'Licence'} — front`)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path, `${l.licence_types?.name || 'Licence'} — back`)} style={{ cursor: 'pointer' }}>back</a>}</td>
                     <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => removeLicence(l)}>Remove</button></td>
                   </tr>
                 )

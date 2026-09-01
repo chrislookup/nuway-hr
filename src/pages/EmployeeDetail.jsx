@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase, fmtDate, byCatRank, loadCatOrder } from '../lib/supabase'
 import StatusBadge from '../components/StatusBadge'
 import LicenceForm from '../components/LicenceForm'
+import ImageViewer from '../components/ImageViewer'
 import { suggestInductions } from '../lib/inductions'
 
 export default function EmployeeDetail({ profile }) {
@@ -96,10 +97,10 @@ export default function EmployeeDetail({ profile }) {
     setLic({ licence_type_id: '', licence_number: '', expiry_date: '' }); load()
   }
 
-  async function viewImg(path) {
+  const [viewing, setViewing] = useState(null)
+  function viewImg(path, title) {
     if (!path) return
-    const { data } = await supabase.storage.from('licences').createSignedUrl(path, 3600)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    setViewing({ path, title })
   }
   async function returnDoc(a) {
     if (!rej.reason.trim()) return
@@ -229,6 +230,7 @@ export default function EmployeeDetail({ profile }) {
 
   return (
     <div>
+      {viewing && <ImageViewer path={viewing.path} title={viewing.title} onClose={() => setViewing(null)} />}
       <Link to="/team">&larr; Team</Link>
       <h1>{emp.first_name} {emp.last_name}</h1>
       <p className="muted">
@@ -412,7 +414,7 @@ export default function EmployeeDetail({ profile }) {
                 <td>{l.verified_at
                   ? <span className="badge completed">Verified</span>
                   : <button className="small" onClick={() => verifyLicence(l)}>Verify</button>}</td>
-                <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
+                <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path, `${emp.first_name} — ${l.licence_types?.name || 'licence'} front`)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path, `${emp.first_name} — ${l.licence_types?.name || 'licence'} back`)} style={{ cursor: 'pointer' }}>back</a>}</td>
                 <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => removeLicence(l)}>Remove</button></td>
               </tr>
             ))}
