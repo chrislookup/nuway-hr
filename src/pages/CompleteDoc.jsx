@@ -97,6 +97,7 @@ export default function CompleteDoc({ profile }) {
     }
     setBusy(true)
     try {
+      const stamp = Date.now()
       const persist = {}, flat = {}
       let sigPath = null, verPath = null
       const active = compFields.length ? [...empFields, ...compFields] : empFields
@@ -105,7 +106,7 @@ export default function CompleteDoc({ profile }) {
         if (val === undefined || val === '' || val === false) continue
         if (f.type === 'signature' || f.type === 'initials') {
           const blob = await (await fetch(val)).blob()
-          const p = `${a.employee_id}/${a.id}-${f.signer}-${f.id}.png`
+          const p = `${a.employee_id}/${a.id}-${stamp}-${f.signer}-${f.id}.png`
           const { error } = await supabase.storage.from('signatures').upload(p, blob, { upsert: true })
           if (error) throw error
           persist[f.id] = p; flat[f.id] = val
@@ -115,7 +116,7 @@ export default function CompleteDoc({ profile }) {
       const masterBytes = await (await fetch(pdfUrl)).arrayBuffer()
       const { flattenPdf } = await import('../lib/flattenPdf')
       const bytes = await flattenPdf(masterBytes, pdfFields, flat)
-      const completed_pdf_path = `${a.employee_id}/${a.id}-completed.pdf`
+      const completed_pdf_path = `${a.employee_id}/${a.id}-${stamp}-completed.pdf`
       const { error: fe } = await supabase.storage.from('completed-docs').upload(completed_pdf_path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
       if (fe) throw fe
       const { error: ce } = await supabase.from('completions').insert({
@@ -167,10 +168,11 @@ export default function CompleteDoc({ profile }) {
     }
     setBusy(true)
     try {
+      const stamp = Date.now()
       let signature_path = null
       if (sig) {
         const blob = await (await fetch(sig)).blob()
-        signature_path = `${a.employee_id}/${a.id}-signature.png`
+        signature_path = `${a.employee_id}/${a.id}-${stamp}-signature.png`
         const { error: se } = await supabase.storage.from('signatures').upload(signature_path, blob, { upsert: true })
         if (se) throw se
       }
@@ -178,7 +180,7 @@ export default function CompleteDoc({ profile }) {
       let firstName = null, firstPath = null
       for (const pi of assessorIdx) {
         const cblob = await (await fetch(values[`cp_${pi}_sig`])).blob()
-        const cpath = `${a.employee_id}/${a.id}-cp-${pi}.png`
+        const cpath = `${a.employee_id}/${a.id}-${stamp}-cp-${pi}.png`
         const { error: ve } = await supabase.storage.from('signatures').upload(cpath, cblob, { upsert: true })
         if (ve) throw ve
         verifier_data[String(pi)] = { name: String(values[`cp_${pi}_name`]).trim(), sig: cpath }
@@ -188,13 +190,13 @@ export default function CompleteDoc({ profile }) {
       let uploadedPath = null
       if (files.length) {
         if (files.length === 1 && ((files[0].type || '').includes('pdf') || files[0].name.toLowerCase().endsWith('.pdf'))) {
-          uploadedPath = `${a.employee_id}/${a.id}-${files[0].name.replace(/[^\w.\-]+/g, '_')}`
+          uploadedPath = `${a.employee_id}/${a.id}-${stamp}-${files[0].name.replace(/[^\w.\-]+/g, '_')}`
           const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, files[0], { upsert: true })
           if (fe) throw fe
         } else {
           const { filesToPdf } = await import('../lib/filesToPdf')
           const bytes = await filesToPdf(files)
-          uploadedPath = `${a.employee_id}/${a.id}-evidence.pdf`
+          uploadedPath = `${a.employee_id}/${a.id}-${stamp}-evidence.pdf`
           const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
           if (fe) throw fe
         }

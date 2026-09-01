@@ -66,6 +66,7 @@ export default function AssessDoc({ profile }) {
     if (!signedName.trim()) { setErr('Please type your full name to confirm.'); return }
     setBusy(true)
     try {
+      const stamp = Date.now()
       const persist = { ...(comp?.form_data?.pdf?.values || {}) }
       let verPath = null
       for (const f of compFields) {
@@ -73,7 +74,7 @@ export default function AssessDoc({ profile }) {
         if (val === undefined || val === '' || val === false) continue
         if (f.type === 'signature' || f.type === 'initials') {
           const blob = await (await fetch(val)).blob()
-          const p = `${a.employee_id}/${a.id}-cp-${f.id}.png`
+          const p = `${a.employee_id}/${a.id}-${stamp}-cp-${f.id}.png`
           const { error } = await supabase.storage.from('signatures').upload(p, blob, { upsert: true })
           if (error) throw error
           persist[f.id] = p
@@ -83,7 +84,7 @@ export default function AssessDoc({ profile }) {
       const masterBytes = await (await fetch(pdfUrl)).arrayBuffer()
       const { flattenPdf } = await import('../lib/flattenPdf')
       const bytes = await flattenPdf(masterBytes, pdfFields, pdfVals)
-      const outPath = `${a.employee_id}/${a.id}-completed.pdf`
+      const outPath = `${a.employee_id}/${a.id}-${stamp}-completed.pdf`
       const { error: fe } = await supabase.storage.from('completed-docs').upload(outPath, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
       if (fe) throw fe
       const { error: ce } = await supabase.from('completions').update({
@@ -111,7 +112,7 @@ export default function AssessDoc({ profile }) {
     setBusy(true)
     try {
       const blob = await (await fetch(sig)).blob()
-      const path = `${a.employee_id}/${a.id}-assessor.png`
+      const path = `${a.employee_id}/${a.id}-${Date.now()}-assessor.png`
       const { error: se } = await supabase.storage.from('signatures').upload(path, blob, { upsert: true })
       if (se) throw se
       const upd = {

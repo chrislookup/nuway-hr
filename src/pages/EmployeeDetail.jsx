@@ -115,7 +115,7 @@ export default function EmployeeDetail({ profile }) {
       const { data: docRow } = await supabase.from('documents').select('current_version_id').eq('id', imp.document_id).single()
       if (!docRow?.current_version_id) throw new Error('Open this document in Admin \u2192 Documents and Save once first, then retry.')
       const safe = imp.file.name.replace(/[^\w.\-]+/g, '_')
-      const path = `${id}/${asg.id}-${safe}`
+      const path = `${id}/${asg.id}-${Date.now()}-${safe}`
       const { error: fe } = await supabase.storage.from('completed-docs').upload(path, imp.file, { upsert: true })
       if (fe) throw fe
       const { error: ce } = await supabase.from('completions').insert({
