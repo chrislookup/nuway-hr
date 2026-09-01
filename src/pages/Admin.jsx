@@ -22,7 +22,7 @@ const DOC_TYPES = [
   ['task', 'Task'],
 ]
 
-const TABS = ['Documents', 'People', 'Organisation', 'Test accounts'] // 'Packs' retired — assignment is now allocator-driven
+const TABS = ['Documents', 'People', 'Organisation', 'Reminders', 'Test accounts'] // 'Packs' retired — assignment is now allocator-driven
 
 export default function Admin({ profile }) {
   const [tab, setTab] = useState('Documents')
@@ -36,6 +36,7 @@ export default function Admin({ profile }) {
       {tab === 'Packs' && <Packs />}
       {tab === 'People' && <People profile={profile} />}
       {tab === 'Organisation' && <Organisation />}
+      {tab === 'Reminders' && <Reminders profile={profile} />}
       {tab === 'Test accounts' && <TestAccounts />}
     </div>
   )
@@ -1038,6 +1039,164 @@ function PreviewModal({ doc, catName, preview, mediaUrl, pages, pdfFields, test,
         )}
         {afterSign.length > 0 && <p className="muted" style={{ fontSize: 13 }}>After the employee submits, this also needs {afterSign.join(' + ')} sign-off before it counts as complete.</p>}
         <div className="row" style={{ marginTop: 12 }}><button className="secondary" onClick={onClose}>Close preview</button></div>
+      </div>
+    </div>
+  )
+}
+
+function Reminders({ profile }) {
+  const [s, setS] = useState(null)
+  const [log, setLog] = useState([])
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function load() {
+    const { data } = await supabase.from('reminder_settings').select('*').eq('id', 1).single()
+    setS(data)
+    const { data: l } = await supabase.from('reminder_log')
+      .select('kind, sent_at, profiles(first_name, last_name), locations(name)')
+      .order('sent_at', { ascending: false }).limit(25)
+    setLog(l || [])
+  }
+  useEffect(() => { load() }, [])
+  if (!s) return <p className="muted">Loading…</p>
+
+  const set = (patch) => setS({ ...s, ...patch })
+  async function save() {
+    setBusy(true); setMsg('')
+    const { id, updated_at, updated_by, send_hour_local, ...rest } = s
+    const { error } = await supabase.from('reminder_settings')
+      .update({ ...rest, updated_at: new Date().toISOString(), updated_by: profile.id }).eq('id', 1)
+    setMsg(error ? error.message : 'Saved.')
+    setBusy(false); load()
+  }
+  async function saveTime(hour) {
+    setBusy(true); setMsg('')
+    const { data, error } = await supabase.rpc('set_reminder_send_time', { local_hour: Number(hour) })
+    setMsg(error ? error.message : data)
+    setBusy(false); load()
+  }
+  async function runNow() {
+    if (!window.confirm('Send any reminders that are due right now? Real emails will go to staff and stores.')) return
+    setBusy(true); setMsg('')
+    const { data, error } = await supabase.rpc('run_reminders_now')
+    setMsg(error ? error.message : `Run complete — ${data} email${data === 1 ? '' : 's'} sent.`)
+    setBusy(false); load()
+  }
+
+  const hours = Array.from({ length: 24 }, (_, h) => h)
+  const hr = h => `${((h + 11) % 12) + 1}:00 ${h < 12 ? 'am' : 'pm'}`
+  const kindLabel = { overdue: 'Overdue digest', store_summary: 'Store summary', licence: 'Licence expiry' }
+
+  return (
+    <div>
+      <div className="card">
+        <div className="row between">
+          <h2 style={{ margin: 0 }}>Reminder emails</h2>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={s.enabled} onChange={e => set({ enabled: e.target.checked })} />
+            <b>{s.enabled ? 'On' : 'Paused'}</b>
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 13 }}>
+          Reminders are checked once a day and only sent when something is actually due — nobody gets a daily nag.
+          Turning this off stops all reminder emails immediately.
+        </p>
+        {msg && <div className="success">{msg}</div>}
+
+        <label>Send time (Brisbane)</label>
+        <div className="row">
+          <select style={{ width: 140 }} value={s.send_hour_local} onChange={e => saveTime(e.target.value)} disabled={busy}>
+            {hours.map(h => <option key={h} value={h}>{hr(h)}</option>)}
+          </select>
+          <span className="muted" style={{ fontSize: 13 }}>Applies immediately — no need to press Save.</span>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="row between">
+          <h3 style={{ margin: 0 }}>Overdue reminders — to the employee</h3>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={s.overdue_enabled} onChange={e => set({ overdue_enabled: e.target.checked })} /> On
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 13 }}>
+          One email listing everything overdue. Sent the first day something goes overdue, then again after the gap below,
+          then repeating. Items waiting on a manager's sign-off are never chased.
+        </p>
+        <div className="row">
+          <div style={{ width: 200 }}><label>Second reminder after (days)</label>
+            <input type="number" min="1" value={s.overdue_second_days} onChange={e => set({ overdue_second_days: Number(e.target.value) })} /></div>
+          <div style={{ width: 200 }}><label>Then repeat every (days)</label>
+            <input type="number" min="1" value={s.overdue_repeat_days} onChange={e => set({ overdue_repeat_days: Number(e.target.value) })} /></div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="row between">
+          <h3 style={{ margin: 0 }}>Store summary — to the store</h3>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={s.store_summary_enabled} onChange={e => set({ store_summary_enabled: e.target.checked })} /> On
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 13 }}>
+          A table of every staff member with outstanding, overdue, awaiting sign-off and expiring licences.
+          Goes to each store's email address (set in Organisation → Locations).
+        </p>
+        <div style={{ width: 200 }}><label>Send every (days)</label>
+          <input type="number" min="1" value={s.store_summary_days} onChange={e => set({ store_summary_days: Number(e.target.value) })} /></div>
+      </div>
+
+      <div className="card">
+        <div className="row between">
+          <h3 style={{ margin: 0 }}>Licence expiry — to the employee</h3>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={s.licence_enabled} onChange={e => set({ licence_enabled: e.target.checked })} /> On
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 13 }}>Starts before expiry and keeps going until the renewed licence is entered.</p>
+        <div className="row">
+          <div style={{ width: 200 }}><label>Start this many days before expiry</label>
+            <input type="number" min="1" value={s.licence_lead_days} onChange={e => set({ licence_lead_days: Number(e.target.value) })} /></div>
+          <div style={{ width: 200 }}><label>Then repeat every (days)</label>
+            <input type="number" min="1" value={s.licence_repeat_days} onChange={e => set({ licence_repeat_days: Number(e.target.value) })} /></div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Sender</h3>
+        <div className="row">
+          <div style={{ flex: 1 }}><label>From name</label>
+            <input value={s.from_name} onChange={e => set({ from_name: e.target.value })} /></div>
+          <div style={{ flex: 1 }}><label>From email</label>
+            <input value={s.from_email} onChange={e => set({ from_email: e.target.value })} />
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Must be a verified sender in SendGrid, or emails won't deliver.</div></div>
+        </div>
+      </div>
+
+      <div className="row" style={{ marginBottom: 16 }}>
+        <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button>
+        <button className="secondary" onClick={runNow} disabled={busy || !s.enabled}>Run now</button>
+        <span className="muted" style={{ fontSize: 13 }}>"Run now" sends anything due at this moment — useful for testing.</span>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Recently sent</h3>
+        {log.length === 0 && <p className="muted">Nothing sent yet.</p>}
+        {log.length > 0 && (
+          <table style={{ fontSize: 13 }}>
+            <thead><tr><th>When</th><th>Type</th><th>To</th></tr></thead>
+            <tbody>
+              {log.map((x, i) => (
+                <tr key={i}>
+                  <td className="muted">{new Date(x.sent_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
+                  <td>{kindLabel[x.kind] || x.kind}</td>
+                  <td>{x.profiles ? `${x.profiles.first_name} ${x.profiles.last_name || ''}` : x.locations?.name || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )
