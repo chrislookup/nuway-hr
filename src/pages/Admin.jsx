@@ -724,7 +724,7 @@ function Organisation() {
       supabase.from('locations').select('*').order('name'),
       supabase.from('job_roles').select('*').order('name'),
       supabase.from('vehicles').select('*, locations(name)').order('name'),
-      supabase.from('licence_types').select('*').order('name'),
+      supabase.from('licence_types').select('*').order('sort_order').order('name'),
       supabase.from('document_categories').select('*').order('sort_order'),
     ])
     setLocations(l.data || []); setRoles(r.data || []); setVehicles(v.data || []); setLicTypes(t.data || []); setCats(cc.data || [])
@@ -840,7 +840,25 @@ function Organisation() {
       </div>
       <div className="card">
         <h2>Licence types</h2>
-        <table><tbody>{licTypes.map(t => <tr key={t.id}><td>{t.name}</td><td className="muted">remind {t.reminder_days}d before expiry</td></tr>)}</tbody></table>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Tick what staff must fill in for each type. Validity auto-fills the expiry date (e.g. 6-month logbooks).</p>
+        <table>
+          <thead><tr><th>Type</th><th>Expiry</th><th>Class</th><th>State</th><th>Auto/manual</th><th>Valid (months)</th><th>Remind (days)</th></tr></thead>
+          <tbody>{licTypes.map(t => {
+            const upd = async (patch) => { await supabase.from('licence_types').update(patch).eq('id', t.id); load() }
+            const tick = (field) => <input type="checkbox" style={{ width: 'auto' }} checked={!!t[field]} onChange={e => upd({ [field]: e.target.checked })} />
+            return (
+              <tr key={t.id}>
+                <td>{t.name}</td>
+                <td>{tick('requires_expiry')}</td>
+                <td>{tick('requires_class')}</td>
+                <td>{tick('requires_state')}</td>
+                <td>{tick('transmission_applies')}</td>
+                <td><input type="number" style={{ width: 70 }} defaultValue={t.validity_months || ''} onBlur={e => upd({ validity_months: e.target.value ? Number(e.target.value) : null })} /></td>
+                <td><input type="number" style={{ width: 70 }} defaultValue={t.reminder_days} onBlur={e => upd({ reminder_days: Number(e.target.value) || 60 })} /></td>
+              </tr>
+            )
+          })}</tbody>
+        </table>
         <div className="row" style={{ marginTop: 10 }}>
           <input placeholder="New licence type" value={nlt} onChange={e => setNlt(e.target.value)} />
           <button className="small" onClick={async () => { if (nlt.trim()) { await supabase.from('licence_types').insert({ name: nlt.trim() }); setNlt(''); load() } }}>Add</button>

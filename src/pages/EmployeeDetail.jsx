@@ -43,7 +43,7 @@ export default function EmployeeDetail({ profile }) {
     setLicences(l || [])
     const { data: d } = await supabase.from('documents').select('id, code, title').eq('active', true).order('code')
     setDocs(d || [])
-    const { data: lt } = await supabase.from('licence_types').select('*').order('name')
+    const { data: lt } = await supabase.from('licence_types').select('*').order('sort_order').order('name')
     setLicTypes(lt || [])
     const { data: al } = await supabase.from('locations').select('id, name').eq('active', true).order('name')
     setAllLocs(al || [])
@@ -176,6 +176,14 @@ export default function EmployeeDetail({ profile }) {
     setMsg(re ? ('Details saved, but pushing new documents failed: ' + re.message) : `Details saved.${pushed ? ` Pushed ${pushed} new document${pushed === 1 ? '' : 's'} to their to-do.` : ' No new documents needed.'}`)
     setEditing(false); setSavingDetails(false); load()
   }
+  async function verifyLicence(l) {
+    if (!window.confirm(`Confirm you have sighted ${emp.first_name}'s physical ${l.licence_types?.name || 'licence'} and the details match?`)) return
+    const { error } = await supabase.from('licences')
+      .update({ verified_by: profile.id, verified_at: new Date().toISOString() }).eq('id', l.id)
+    setMsg(error ? error.message : 'Licence verified.')
+    load()
+  }
+
   async function removeLicence(l) {
     if (!window.confirm(`Remove ${l.licence_types?.name || 'this licence'} for ${emp.first_name}?`)) return
     const { error } = await supabase.from('licences').update({ active: false }).eq('id', l.id)
@@ -352,20 +360,23 @@ export default function EmployeeDetail({ profile }) {
         </div>
         {showLic && <LicenceForm employeeId={id} licenceTypes={licTypes} verifiedBy={profile.id} onSaved={() => { setShowLic(false); load() }} onCancel={() => setShowLic(false)} />}
         <table>
-          <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th><th></th></tr></thead>
+          <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Status</th><th>Photos</th><th></th></tr></thead>
           <tbody>
             {licences.map(l => (
               <tr key={l.id}>
                 <td>{l.licence_types?.name}</td>
-                <td>{l.licence_class || '—'}</td>
-                <td>{l.licence_number || '—'}</td>
+                <td>{[l.licence_class, l.transmission].filter(Boolean).join(' · ') || '—'}</td>
+                <td>{l.licence_number || '—'}{l.state ? <span className="muted"> · {l.state === 'Overseas' ? (l.country || 'Overseas') : l.state}</span> : null}</td>
                 <td className="muted">{l.conditions || '—'}</td>
                 <td>{fmtDate(l.expiry_date)}</td>
+                <td>{l.verified_at
+                  ? <span className="badge completed">Verified</span>
+                  : <button className="small" onClick={() => verifyLicence(l)}>Verify</button>}</td>
                 <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
                 <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => removeLicence(l)}>Remove</button></td>
               </tr>
             ))}
-            {licences.length === 0 && <tr><td colSpan={7} className="muted">No licences recorded.</td></tr>}
+            {licences.length === 0 && <tr><td colSpan={8} className="muted">No licences recorded.</td></tr>}
           </tbody>
         </table>
       </div>

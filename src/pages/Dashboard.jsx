@@ -38,7 +38,7 @@ export default function Dashboard({ profile }) {
       .select('*, licence_types(name)')
       .eq('employee_id', profile.id).eq('active', true)
       .then(({ data }) => setLicences(data || []))
-    supabase.from('licence_types').select('*').order('name').then(({ data }) => setLicenceTypes(data || []))
+    supabase.from('licence_types').select('*').order('sort_order').order('name').then(({ data }) => setLicenceTypes(data || []))
     if (profile.can_assess) loadAssess()
   }, [profile.id])
 
@@ -231,17 +231,18 @@ export default function Dashboard({ profile }) {
         {licences.length === 0 && !showLic && <p className="muted">No licences yet. Add your driver, forklift or loader licence with front &amp; back photos.</p>}
         {licences.length > 0 && (
           <table>
-            <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Photos</th><th></th></tr></thead>
+            <thead><tr><th>Licence</th><th>Class</th><th>Number</th><th>Conditions</th><th>Expiry</th><th>Status</th><th>Photos</th><th></th></tr></thead>
             <tbody>
               {licences.map(l => {
                 const soon = l.expiry_date && new Date(l.expiry_date) < new Date(Date.now() + 60 * 864e5)
                 return (
                   <tr key={l.id}>
                     <td>{l.licence_types?.name}</td>
-                    <td>{l.licence_class || '—'}</td>
-                    <td>{l.licence_number || '—'}</td>
+                    <td>{[l.licence_class, l.transmission === 'auto' ? 'auto' : l.transmission === 'manual' ? 'manual' : null].filter(Boolean).join(' · ') || '—'}</td>
+                    <td>{l.licence_number || '—'}{l.state ? <span className="muted"> · {l.state === 'Overseas' ? (l.country || 'Overseas') : l.state}</span> : null}</td>
                     <td className="muted">{l.conditions || '—'}</td>
                     <td>{l.expiry_date ? <span className={soon ? 'badge overdue' : ''}>{fmtDate(l.expiry_date)}</span> : '—'}</td>
+                    <td>{l.verified_at ? <span className="badge completed">Verified</span> : <span className="badge awaiting_review">Awaiting check</span>}</td>
                     <td>{l.front_image_path && <a onClick={() => viewImg(l.front_image_path)} style={{ cursor: 'pointer' }}>front</a>}{l.front_image_path && l.back_image_path ? ' · ' : ''}{l.back_image_path && <a onClick={() => viewImg(l.back_image_path)} style={{ cursor: 'pointer' }}>back</a>}</td>
                     <td style={{ textAlign: 'right' }}><button className="small" style={{ color: '#b00020' }} onClick={() => removeLicence(l)}>Remove</button></td>
                   </tr>
