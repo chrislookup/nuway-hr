@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import PlantLicenceRegister from '../components/PlantLicenceRegister'
+import { machineNeeds } from '../lib/inductions'
 
 const TYPES = ['Truck', 'Loader', 'Forklift']
 
@@ -16,6 +17,8 @@ export default function StoreSettings({ profile }) {
   const [busy, setBusy] = useState(false)
   const [indMap, setIndMap] = useState({})
   const [tab, setTab] = useState('register')
+  const [staff, setStaff] = useState([])
+  const [induct, setInduct] = useState(null)   // { vehicle, picks:{id:bool} }
 
   async function load() {
     const { data: l } = await supabase.from('locations').select('*').eq('active', true).order('name')
@@ -31,6 +34,22 @@ export default function StoreSettings({ profile }) {
       const { data: m } = await supabase.from('manager_location_access').select('location_id').eq('manager_id', profile.id)
       setMyLocs((m || []).map(x => x.location_id))
     }
+    const { data: els } = await supabase.from('employee_locations')
+      .select('location_id, profiles(id, first_name, last_name, status, is_test, employee_job_roles(job_roles(name)))')
+    const ids = [...new Set((els || []).map(x => x.profiles?.id).filter(Boolean))]
+    let licBy = {}
+    if (ids.length) {
+      const { data: lics } = await supabase.from('licences')
+        .select('employee_id, licence_class, licence_types(name)').in('employee_id', ids).eq('active', true)
+      for (const x of lics || []) (licBy[x.employee_id] = licBy[x.employee_id] || []).push(x)
+    }
+    setStaff((els || []).filter(x => x.profiles?.status === 'active').map(x => ({
+      id: x.profiles.id, location_id: x.location_id,
+      name: `${x.profiles.first_name} ${x.profiles.last_name || ''}`.trim(),
+      is_test: x.profiles.is_test,
+      roles: (x.profiles.employee_job_roles || []).map(r => r.job_roles?.name).filter(Boolean),
+      licences: licBy[x.profiles.id] || [],
+    })))
   }
   useEffect(() => { load() }, [])
 
@@ -46,11 +65,43 @@ export default function StoreSettings({ profile }) {
         location_id: nv.location_id, induction_document_id: indMap[nv.type] || null, active: true,
       })
       if (error) throw error
-      setMsg(`${nv.type} ${nv.rego} added. Assign its induction to specific staff from their profile (Team → person → Vehicle inductions).`)
+      const { data: added } = await supabase.from('vehicles').select('*').eq('rego', nv.rego.trim()).maybeSingle()
+      setMsg(`${nv.type} ${nv.rego} added.`)
+      if (added) openInduct(added)
       setNv({ type: 'Forklift', rego: '', name: '', location_id: '', induction_document_id: '' }); load()
     } catch (e) { setMsg(e.message || String(e)) }
     setBusy(false)
   }
+  function candidatesFor(v) {
+    return staff.filter(p => p.location_id === v.location_id && !!machineNeeds(p)[v.type])
+  }
+  function openInduct(v) {
+    const picks = {}
+    for (const p of candidatesFor(v)) picks[p.id] = true
+    setInduct({ vehicle: v, picks })
+  }
+  async function assignInductions() {
+    const v = induct.vehicle
+    const chosen = Object.entries(induct.picks).filter(([, on]) => on).map(([pid]) => pid)
+    if (!chosen.length) { setInduct(null); return }
+    if (!v.induction_document_id) { setMsg('This vehicle has no induction form attached — set its type first.'); return }
+    setBusy(true)
+    const { data: existing } = await supabase.from('assignments')
+      .select('employee_id').eq('vehicle_id', v.id).in('employee_id', chosen)
+    const already = new Set((existing || []).map(x => x.employee_id))
+    const rows = chosen.filter(pid => !already.has(pid)).map(pid => ({
+      employee_id: pid, document_id: v.induction_document_id, vehicle_id: v.id,
+      source: 'manual', assigned_by: profile.id,
+      due_date: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10),
+    }))
+    if (rows.length) {
+      const { error } = await supabase.from('assignments').insert(rows)
+      if (error) { setMsg(error.message); setBusy(false); return }
+    }
+    setMsg(`${rows.length} induction${rows.length === 1 ? '' : 's'} assigned for ${v.type} ${v.rego}.${already.size ? ` ${already.size} already had it.` : ''}`)
+    setInduct(null); setBusy(false)
+  }
+
   async function toggleActive(v) {
     await supabase.from('vehicles').update({ active: !v.active }).eq('id', v.id); load()
   }
@@ -124,6 +175,57 @@ export default function StoreSettings({ profile }) {
         <button style={{ marginTop: 10 }} onClick={addVehicle} disabled={busy}>{busy ? 'Adding…' : 'Add vehicle'}</button>
       </div>
 
+      {induct && (() => {
+        const v = induct.vehicle
+        const cands = candidatesFor(v)
+        const others = staff.filter(p => p.location_id === v.location_id && !cands.some(c => c.id === p.id))
+        const n = Object.values(induct.picks).filter(Boolean).length
+        return (
+          <div className="card" style={{ borderLeft: '4px solid var(--teal)' }}>
+            <div className="row between">
+              <h2 style={{ margin: 0 }}>Who needs inducting on {v.type} {v.rego}?</h2>
+              <button className="secondary small" onClick={() => setInduct(null)}>Close</button>
+            </div>
+            {!v.risk_assessment_path && (
+              <div className="error" style={{ marginTop: 10 }}>
+                No risk assessment uploaded for this machine yet. Staff read and sign the risk assessment as part of the induction — upload it before they start.
+              </div>
+            )}
+            <p className="muted" style={{ fontSize: 13 }}>
+              Ticked by default: everyone at this store whose role or licences suit a {v.type.toLowerCase()}. Untick anyone who won't operate it.
+            </p>
+            <div className="checkgrid">
+              {cands.map(p => (
+                <label key={p.id}>
+                  <input type="checkbox" checked={!!induct.picks[p.id]}
+                    onChange={e => setInduct({ ...induct, picks: { ...induct.picks, [p.id]: e.target.checked } })} />
+                  {p.name}{p.is_test ? ' (test)' : ''} <span className="muted" style={{ fontSize: 12 }}>· {p.roles.join('/') || 'no role'}</span>
+                </label>
+              ))}
+              {cands.length === 0 && <p className="muted">Nobody at this store currently has a matching role or licence.</p>}
+            </div>
+            {others.length > 0 && (
+              <details style={{ marginTop: 10 }}>
+                <summary className="muted" style={{ cursor: 'pointer', fontSize: 13 }}>Other staff at this store ({others.length})</summary>
+                <div className="checkgrid" style={{ marginTop: 8 }}>
+                  {others.map(p => (
+                    <label key={p.id}>
+                      <input type="checkbox" checked={!!induct.picks[p.id]}
+                        onChange={e => setInduct({ ...induct, picks: { ...induct.picks, [p.id]: e.target.checked } })} />
+                      {p.name}{p.is_test ? ' (test)' : ''} <span className="muted" style={{ fontSize: 12 }}>· {p.roles.join('/') || 'no role'}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            )}
+            <div className="row" style={{ marginTop: 12 }}>
+              <button onClick={assignInductions} disabled={busy || !n}>{busy ? 'Assigning…' : `Assign induction to ${n} ${n === 1 ? 'person' : 'people'}`}</button>
+              <button className="secondary" onClick={() => setInduct(null)}>Not now</button>
+            </div>
+          </div>
+        )
+      })()}
+
       {Object.entries(byLoc).map(([loc, list]) => (
         <div key={loc} className="card">
           <h2>{loc}</h2>
@@ -156,7 +258,7 @@ export default function StoreSettings({ profile }) {
                       <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => uploadRA(v, e.target.files?.[0])} />
                     </label>
                   </td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small secondary" onClick={() => startEdit(v)}>Edit</button> <button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small" onClick={() => openInduct(v)}>Induct staff</button> <button className="small secondary" onClick={() => startEdit(v)}>Edit</button> <button className={`small ${v.active ? 'secondary' : ''}`} onClick={() => toggleActive(v)}>{v.active ? 'Active' : 'Inactive'}</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteVehicle(v)}>Delete</button></td>
                 </tr>
               )))}
             </tbody>
