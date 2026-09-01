@@ -22,7 +22,7 @@ const DOC_TYPES = [
   ['task', 'Task'],
 ]
 
-const TABS = ['Documents', 'People', 'Organisation', 'Reminders', 'Test accounts'] // 'Packs' retired — assignment is now allocator-driven
+const TABS = ['Documents', 'People', 'Organisation', 'Reminders', 'Security', 'Test accounts'] // 'Packs' retired — assignment is now allocator-driven
 
 export default function Admin({ profile }) {
   const [tab, setTab] = useState('Documents')
@@ -37,6 +37,7 @@ export default function Admin({ profile }) {
       {tab === 'People' && <People profile={profile} />}
       {tab === 'Organisation' && <Organisation />}
       {tab === 'Reminders' && <Reminders profile={profile} />}
+      {tab === 'Security' && <Security profile={profile} />}
       {tab === 'Test accounts' && <TestAccounts />}
     </div>
   )
@@ -1211,6 +1212,61 @@ function Reminders({ profile }) {
           </table>
         )}
       </div>
+    </div>
+  )
+}
+
+function Security({ profile }) {
+  const [s, setS] = useState(null)
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function load() {
+    const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single()
+    setS(data)
+  }
+  useEffect(() => { load() }, [])
+  if (!s) return <p className="muted">Loading…</p>
+
+  const set = patch => setS({ ...s, ...patch })
+  async function save() {
+    setBusy(true); setMsg('')
+    const { id, updated_at, updated_by, ...rest } = s
+    const { error } = await supabase.from('app_settings')
+      .update({ ...rest, updated_at: new Date().toISOString(), updated_by: profile.id }).eq('id', 1)
+    setMsg(error ? error.message : 'Saved. New timings apply next time someone signs in.')
+    setBusy(false); load()
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 640 }}>
+      <div className="row between">
+        <h2 style={{ margin: 0 }}>Automatic sign-out</h2>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={s.idle_enabled} onChange={e => set({ idle_enabled: e.target.checked })} />
+          <b>{s.idle_enabled ? 'On' : 'Off'}</b>
+        </label>
+      </div>
+      <p className="muted" style={{ fontSize: 13 }}>
+        Signs people out when the screen has been left idle — important on shared store computers where
+        licence photos and personal details would otherwise stay on screen. A warning appears first, so
+        nobody is cut off mid-document without a chance to continue.
+      </p>
+      {msg && <div className="success">{msg}</div>}
+      <div className="row">
+        <div style={{ width: 220 }}><label>Employees — idle minutes</label>
+          <input type="number" min="1" max="480" value={s.idle_minutes}
+            onChange={e => set({ idle_minutes: Number(e.target.value) })} />
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Longer suits staff reading through a policy.</div></div>
+        <div style={{ width: 220 }}><label>Managers &amp; admins — idle minutes</label>
+          <input type="number" min="1" max="480" value={s.idle_minutes_privileged}
+            onChange={e => set({ idle_minutes_privileged: Number(e.target.value) })} />
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Shorter — they can see everyone's records.</div></div>
+        <div style={{ width: 200 }}><label>Warning before sign-out (seconds)</label>
+          <input type="number" min="10" max="600" value={s.idle_warn_seconds}
+            onChange={e => set({ idle_warn_seconds: Number(e.target.value) })} /></div>
+      </div>
+      <button style={{ marginTop: 14 }} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
     </div>
   )
 }

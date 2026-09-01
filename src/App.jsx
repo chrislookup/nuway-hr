@@ -13,6 +13,7 @@ import SignedRecord from './pages/SignedRecord'
 import AssessDoc from './pages/AssessDoc'
 import Admin from './pages/Admin'
 import StoreSettings from './pages/StoreSettings'
+import IdleTimeout from './components/IdleTimeout'
 import PreEmployment from './pages/PreEmployment'
 import Library from './pages/Library'
 
@@ -96,6 +97,7 @@ export default function App() {
 
   return (
     <HashRouter>
+      <IdleTimeout profile={profile} />
       <div className="app">
         <div className="sidebar">
           <div className="brand">
