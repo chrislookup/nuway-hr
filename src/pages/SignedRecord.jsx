@@ -110,13 +110,21 @@ export default function SignedRecord() {
           )
         })}
 
-        {!pages && Object.keys(fd).length > 0 && (
-          <table className="record-meta"><tbody>
-            {Object.entries(fd).filter(([k]) => k !== 'uploaded_file').map(([k, v]) => (
-              <tr key={k}><td>{k}</td><td>{String(v)}</td></tr>
-            ))}
-          </tbody></table>
-        )}
+        {(() => {
+          // internal bookkeeping — not part of the signed record
+          const HIDE = ['uploaded_file', 'ack', 'ra_ack', 'pdf']
+          const rows = Object.entries(fd)
+            .filter(([k, v]) => !HIDE.includes(k) && v !== null && v !== undefined && v !== '')
+          if (pages || !rows.length) return null
+          const label = k => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+          return (
+            <table className="record-meta"><tbody>
+              {rows.map(([k, v]) => (
+                <tr key={k}><td>{label(k)}</td><td>{typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</td></tr>
+              ))}
+            </tbody></table>
+          )
+        })()}
 
         {filePath && <p className="no-print" style={{ marginTop: 16 }}>
           <button className="small secondary" onClick={() => setViewing(true)}>Open signed document (PDF)</button></p>}
