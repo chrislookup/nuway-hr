@@ -22,6 +22,8 @@ export default function CompleteDoc({ profile }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+  const [attemptNo, setAttemptNo] = useState(1)
+  const [wrongSet, setWrongSet] = useState([])
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfVals, setPdfVals] = useState({})
   const [acks, setAcks] = useState({})
@@ -169,6 +171,33 @@ export default function CompleteDoc({ profile }) {
     }
     setBusy(true)
     try {
+      // Mark first: a document with an understanding check can't be completed until it's passed.
+      // A failed attempt is still recorded (it's part of the training history) but nothing else is
+      // saved — no signature, no completion — and the employee stays on the page to try again.
+      let passed = null, score = null, wrongIdx = []
+      if (hasQuiz) {
+        const qs = test.questions || []
+        const pts = qs.reduce((sum, q, i) => sum + (answers[i] === q.answer ? (q.points || 1) : 0), 0)
+        const total = qs.reduce((sum, q) => sum + (q.points || 1), 0)
+        score = total ? Math.round(pts / total * 100) : 0
+        passed = score >= Number(test.pass_mark || 80)
+        wrongIdx = qs.map((q, i) => (answers[i] === q.answer ? null : i)).filter(i => i !== null)
+        if (!passed) {
+          const { error: te } = await supabase.from('test_attempts').insert({
+            assignment_id: a.id, test_id: test.id, answers, score, passed: false, review: 'pending',
+          })
+          if (te) throw te
+          if (a.status === 'not_started') await supabase.from('assignments').update({ status: 'in_progress' }).eq('id', a.id)
+          const next = { ...answers }
+          for (const i of wrongIdx) delete next[i]      // clear the wrong ones so they must re-answer
+          setAnswers(next)
+          setWrongSet(wrongIdx)
+          setAttemptNo(n => n + 1)
+          setResult({ score, passed: false, mark: Number(test.pass_mark || 80), wrong: wrongIdx.length, total: qs.length })
+          setBusy(false)
+          return
+        }
+      }
       const stamp = Date.now()
       let signature_path = null
       if (sig) {
@@ -202,14 +231,6 @@ export default function CompleteDoc({ profile }) {
           if (fe) throw fe
         }
       }
-      let passed = null, score = null
-      if (hasQuiz) {
-        const qs = test.questions || []
-        const pts = qs.reduce((s, q, i) => s + (answers[i] === q.answer ? (q.points || 1) : 0), 0)
-        const total = qs.reduce((s, q) => s + (q.points || 1), 0)
-        score = total ? Math.round(pts / total * 100) : 0
-        passed = score >= Number(test.pass_mark || 80)
-      }
       const { data: comp, error: ce } = await supabase.from('completions').insert({
         assignment_id: a.id,
         document_version_id: version?.id,
@@ -224,14 +245,12 @@ export default function CompleteDoc({ profile }) {
       if (ce) throw ce
       if (hasQuiz) {
         const { error: te } = await supabase.from('test_attempts').insert({
-          assignment_id: a.id, test_id: test.id, answers, score, passed,
-          review: passed ? 'passed_off' : 'pending',
+          assignment_id: a.id, test_id: test.id, answers, score, passed: true, review: 'passed_off',
         })
         if (te) throw te
       }
       let status = 'completed'
-      if (hasQuiz && !passed) status = 'awaiting_review'
-      else if (doc.requires_manager_signoff || doc.requires_admin_signoff || (doc.requires_assessor_signoff && !hasAssessor)) status = 'awaiting_review'
+      if (doc.requires_manager_signoff || doc.requires_admin_signoff || (doc.requires_assessor_signoff && !hasAssessor)) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
         upd.completed_at = new Date().toISOString()
@@ -254,15 +273,24 @@ export default function CompleteDoc({ profile }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(12,25,20,.6)', zIndex: 9998,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div className="card" style={{ maxWidth: 460, margin: 0, textAlign: 'center' }}>
-            <h2 style={{ marginTop: 0 }}>{result.passed ? 'Passed' : 'Not quite'}</h2>
+            <h2 style={{ marginTop: 0 }}>{result.passed ? 'Passed' : 'Not quite yet'}</h2>
             <p style={{ fontSize: 34, fontWeight: 800, margin: '4px 0', color: result.passed ? 'var(--green)' : '#b00020' }}>
               {result.score}%
             </p>
             <p className="muted">Pass mark {result.mark}%</p>
-            {result.passed
-              ? <p>Well done — this is now recorded as complete.</p>
-              : <p>Your answers have been sent to your manager to go through with you. They'll let you know what happens next — you don't need to do anything right now.</p>}
-            <button style={{ marginTop: 10 }} onClick={() => nav('/')}>Back to my dashboard</button>
+            {result.passed ? (<>
+              <p>Well done — this is now recorded as complete.</p>
+              <button style={{ marginTop: 10 }} onClick={() => nav('/')}>Back to my dashboard</button>
+            </>) : (<>
+              <p>You got <b>{result.wrong}</b> of {result.total} question{result.total === 1 ? '' : 's'} wrong.
+                They're marked below and your answers to those have been cleared.</p>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Have another look at the document, then answer them again. You can't complete this
+                until you reach the pass mark — your attempts are saved for your manager to see.
+              </p>
+              <button style={{ marginTop: 10 }} onClick={() => setResult(null)}>Try again</button>{' '}
+              <button className="secondary" onClick={() => nav('/')}>Finish later</button>
+            </>)}
           </div>
         </div>
       )}
@@ -348,10 +376,16 @@ export default function CompleteDoc({ profile }) {
 
       {hasQuiz && (
         <div className="card">
-          <h2>Test — pass mark {Number(test.pass_mark)}%</h2>
+          <h2>Understanding check — pass mark {Number(test.pass_mark)}%</h2>
+          {attemptNo > 1 && (
+            <div className="error" style={{ marginBottom: 12 }}>
+              Attempt {attemptNo}. The question{wrongSet.length === 1 ? '' : 's'} marked below {wrongSet.length === 1 ? 'was' : 'were'} answered
+              incorrectly last time — read that part of the document again and answer {wrongSet.length === 1 ? 'it' : 'them'} once more.
+            </div>
+          )}
           {(test.questions || []).map((q, i) => (
-            <div key={i} style={{ marginBottom: 12 }}>
-              <p><b>{i + 1}. {q.q}</b></p>
+            <div key={i} style={{ marginBottom: 12, ...(wrongSet.includes(i) ? { borderLeft: '4px solid #b00020', paddingLeft: 12 } : {}) }}>
+              <p><b>{i + 1}. {q.q}</b>{wrongSet.includes(i) && <span style={{ color: '#b00020', fontWeight: 700 }}> — try this one again</span>}</p>
               {(q.options || []).map(o => (
                 <label key={o} style={{ display: 'flex', gap: 8, fontWeight: 400, margin: '4px 0' }}>
                   <input type="radio" style={{ width: 'auto' }} name={`q${i}`}

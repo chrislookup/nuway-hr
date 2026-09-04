@@ -111,17 +111,26 @@ export default function SignedRecord() {
         })}
 
         {(() => {
-          // internal bookkeeping — not part of the signed record
+          // What the person actually agreed to, spelled out — this record has to stand on its
+          // own for an auditor or an investigation, so nothing here should be jargon.
+          const rows = []
+          const ack = fd.ack
+          if (Array.isArray(ack) && ack.length) {
+            for (const st of ack) rows.push(['Acknowledged', st])
+          } else if (ack === true) {
+            rows.push(['Acknowledged', 'I confirm I have read and understood this document and I agree to comply with it.'])
+          }
+          if (fd.ra_ack) rows.push(['Vehicle risk assessment', 'Read and acknowledged before completing this induction.'])
           const HIDE = ['uploaded_file', 'ack', 'ra_ack', 'pdf']
-          const rows = Object.entries(fd)
-            .filter(([k, v]) => !HIDE.includes(k) && v !== null && v !== undefined && v !== '')
-          if (pages || !rows.length) return null
           const label = k => k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+          for (const [k, v] of Object.entries(fd)) {
+            if (HIDE.includes(k) || v === null || v === undefined || v === '') continue
+            rows.push([label(k), typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)])
+          }
+          if (pages || !rows.length) return null
           return (
             <table className="record-meta"><tbody>
-              {rows.map(([k, v]) => (
-                <tr key={k}><td>{label(k)}</td><td>{typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</td></tr>
-              ))}
+              {rows.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}
             </tbody></table>
           )
         })()}
