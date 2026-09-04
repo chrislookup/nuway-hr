@@ -36,8 +36,17 @@ export default function Team({ profile }) {
       .select('*, documents(code, title), profiles!assignments_employee_id_fkey(first_name, last_name)')
       .eq('status', 'awaiting_review').order('completed_at', { ascending: false })
     // nobody signs off their own paperwork — my own submissions wait for someone else
-    setReviews((rev || []).filter(a => a.employee_id !== profile.id))
-    setMine((rev || []).filter(a => a.employee_id === profile.id))
+    const revIds = (rev || []).map(x => x.id)
+    let quiz = {}
+    if (revIds.length) {
+      const { data: att } = await supabase.from('test_attempts')
+        .select('assignment_id, score, passed, created_at, tests(pass_mark)')
+        .in('assignment_id', revIds).order('created_at', { ascending: false })
+      for (const t of att || []) if (!quiz[t.assignment_id]) quiz[t.assignment_id] = t
+    }
+    const withQuiz = (rev || []).map(x => ({ ...x, quiz: quiz[x.id] || null }))
+    setReviews(withQuiz.filter(a => a.employee_id !== profile.id))
+    setMine(withQuiz.filter(a => a.employee_id === profile.id))
 
     // who is missing a vehicle induction they look like they need?
     if (ids.length) {
@@ -75,6 +84,9 @@ export default function Team({ profile }) {
     const { error: ae } = ce ? {} : await supabase.from('assignments')
       .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', a.id)
     if (ce || ae) window.alert((ce || ae).message)
+    else if (a.quiz) await supabase.from('test_attempts')
+      .update({ review: 'passed_off', reviewed_by: profile.id, reviewed_at: new Date().toISOString() })
+      .eq('assignment_id', a.id).eq('review', 'pending')
     await load()
     setBusyId(null)
   }
@@ -82,6 +94,9 @@ export default function Team({ profile }) {
   async function reject(a) {
     if (!rej.reason.trim()) return
     setBusyId(a.id)
+    if (a.quiz) await supabase.from('test_attempts')
+      .update({ review: 'retraining_required', reviewed_by: profile.id, reviewed_at: new Date().toISOString(), review_notes: rej.reason.trim() })
+      .eq('assignment_id', a.id).eq('review', 'pending')
     await supabase.from('assignments').update({
       status: 'rejected', rejection_reason: rej.reason.trim(),
       reviewed_by: profile.id, reviewed_at: new Date().toISOString(), completed_at: null,
@@ -175,7 +190,12 @@ export default function Team({ profile }) {
             {reviews.map(a => (
               <tr key={a.id}>
                 <td>{a.profiles?.first_name} {a.profiles?.last_name}</td>
-                <td><b>{a.documents?.code}</b> {a.documents?.title}</td>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}
+                  {a.quiz && !a.quiz.passed && <div style={{ fontSize: 12, color: '#b00020' }}>
+                    Quiz {Number(a.quiz.score)}% — below the {Number(a.quiz.tests?.pass_mark ?? 80)}% pass mark
+                  </div>}
+                  {a.quiz && a.quiz.passed && <div style={{ fontSize: 12 }} className="muted">Quiz {Number(a.quiz.score)}% — passed</div>}
+                </td>
                 <td className="muted">{fmtDate(a.completed_at)}</td>
                 <td style={{ textAlign: 'right' }}>
                   {rej.id === a.id ? (

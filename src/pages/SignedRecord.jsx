@@ -18,6 +18,7 @@ export default function SignedRecord() {
   const [viewing, setViewing] = useState(false)
   const [masterUrl, setMasterUrl] = useState(null)
   const [notfound, setNotfound] = useState(false)
+  const [attempts, setAttempts] = useState([])
 
   useEffect(() => {
     (async () => {
@@ -35,6 +36,10 @@ export default function SignedRecord() {
       if (c?.signature_path) { const { data: s } = await supabase.storage.from('signatures').createSignedUrl(c.signature_path, 3600); setSigUrl(s?.signedUrl || null) }
       if (c?.verifier_signature_path) { const { data: vs } = await supabase.storage.from('signatures').createSignedUrl(c.verifier_signature_path, 3600); setVerifierSigUrl(vs?.signedUrl || null) }
       if (c?.verifier_data) { const map = {}; for (const [k, v] of Object.entries(c.verifier_data)) { if (v?.sig) { const { data: u } = await supabase.storage.from('signatures').createSignedUrl(v.sig, 3600); map[k] = u?.signedUrl || null } } setCpSigs(map) }
+      const { data: att } = await supabase.from('test_attempts')
+        .select('*, tests(questions, pass_mark)').eq('assignment_id', assignmentId)
+        .order('created_at', { ascending: false })
+      setAttempts(att || [])
       const up = c?.completed_pdf_path || c?.form_data?.uploaded_file
       if (up) { setFilePath(up); const { data: f } = await supabase.storage.from('completed-docs').createSignedUrl(up, 3600); setFileUrl(f?.signedUrl || null) }
     })()
@@ -115,6 +120,49 @@ export default function SignedRecord() {
 
         {filePath && <p className="no-print" style={{ marginTop: 16 }}>
           <button className="small secondary" onClick={() => setViewing(true)}>Open signed document (PDF)</button></p>}
+
+        {attempts.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <h3>Understanding check</h3>
+            {attempts.map((att, ai) => {
+              const qs = att.tests?.questions || []
+              const mark = Number(att.tests?.pass_mark ?? 80)
+              return (
+                <div key={att.id} style={{ marginBottom: 18 }}>
+                  <p style={{ margin: '4px 0 10px' }}>
+                    <b>Attempt {attempts.length - ai}</b>{' · '}
+                    <span className={`badge ${att.passed ? 'completed' : 'overdue'}`}>
+                      {Number(att.score)}% — {att.passed ? 'passed' : 'did not pass'}
+                    </span>
+                    <span className="muted"> (pass mark {mark}%) · {fmtDate(att.created_at)}</span>
+                  </p>
+                  <table style={{ fontSize: 13 }}>
+                    <tbody>
+                      {qs.map((q, i) => {
+                        const given = att.answers?.[String(i)] ?? att.answers?.[i]
+                        const right = given === q.answer
+                        return (
+                          <tr key={i}>
+                            <td style={{ width: 24, verticalAlign: 'top', color: right ? 'var(--green)' : '#b00020' }}>
+                              {right ? '✔' : '✘'}
+                            </td>
+                            <td>
+                              <div>{i + 1}. {q.q}</div>
+                              <div style={{ color: right ? 'var(--green)' : '#b00020' }}>
+                                Answered: {given === undefined || given === '' ? '(no answer)' : String(given)}
+                              </div>
+                              {!right && <div className="muted">Correct answer: {q.answer}</div>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <div className="record-sign">
           <h3>Electronic signature</h3>

@@ -21,6 +21,7 @@ export default function CompleteDoc({ profile }) {
   const removeFile = i => setFiles(prev => prev.filter((_, j) => j !== i))
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
   const [pdfUrl, setPdfUrl] = useState(null)
   const [pdfVals, setPdfVals] = useState({})
   const [acks, setAcks] = useState({})
@@ -241,6 +242,7 @@ export default function CompleteDoc({ profile }) {
       }
       const { error: ae } = await supabase.from('assignments').update(upd).eq('id', a.id)
       if (ae) throw ae
+      if (hasQuiz) { setResult({ score, passed, mark: Number(test.pass_mark || 80) }); setBusy(false); return }
       nav('/')
     } catch (e) { setErr(e.message || String(e)) }
     setBusy(false)
@@ -248,6 +250,22 @@ export default function CompleteDoc({ profile }) {
 
   return (
     <div>
+      {result && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(12,25,20,.6)', zIndex: 9998,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="card" style={{ maxWidth: 460, margin: 0, textAlign: 'center' }}>
+            <h2 style={{ marginTop: 0 }}>{result.passed ? 'Passed' : 'Not quite'}</h2>
+            <p style={{ fontSize: 34, fontWeight: 800, margin: '4px 0', color: result.passed ? 'var(--green)' : '#b00020' }}>
+              {result.score}%
+            </p>
+            <p className="muted">Pass mark {result.mark}%</p>
+            {result.passed
+              ? <p>Well done — this is now recorded as complete.</p>
+              : <p>Your answers have been sent to your manager to go through with you. They'll let you know what happens next — you don't need to do anything right now.</p>}
+            <button style={{ marginTop: 10 }} onClick={() => nav('/')}>Back to my dashboard</button>
+          </div>
+        </div>
+      )}
       <a onClick={() => nav(-1)} style={{ cursor: 'pointer' }}>&larr; Back</a>
       <h1>{doc.code} — {doc.title}</h1>
       <p className="muted">{doc.document_categories?.name} · due {fmtDate(a.due_date)}</p>
