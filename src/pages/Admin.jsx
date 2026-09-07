@@ -22,6 +22,27 @@ const DOC_TYPES = [
   ['task', 'Task'],
 ]
 
+// Small help marker: hover for the short version, click for the full explanation.
+function Info({ title, children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span style={{ position: 'relative', display: 'inline-block' }}>
+      <button type="button" onClick={() => setOpen(o => !o)} title={title}
+        style={{ background: '#e0f2f1', color: 'var(--teal, #0F6E6E)', border: 'none', borderRadius: '50%',
+          width: 18, height: 18, lineHeight: '18px', padding: 0, fontSize: 12, fontWeight: 700,
+          cursor: 'pointer', marginLeft: 6, verticalAlign: 'middle' }}>i</button>
+      {open && (
+        <span onClick={() => setOpen(false)} style={{ position: 'absolute', zIndex: 50, left: 0, top: 24, width: 340,
+          background: '#fff', border: '1px solid #cfdad6', borderRadius: 8, padding: '10px 12px',
+          boxShadow: '0 6px 20px rgba(0,0,0,.14)', fontSize: 12.5, fontWeight: 400, color: '#1d2620',
+          lineHeight: 1.45, display: 'block', cursor: 'pointer', whiteSpace: 'normal' }}>
+          {children}
+        </span>
+      )}
+    </span>
+  )
+}
+
 const TABS = ['Documents', 'People', 'Organisation', 'Reminders', 'Security', 'Test accounts'] // 'Packs' retired — assignment is now allocator-driven
 
 export default function Admin({ profile }) {
@@ -232,11 +253,24 @@ function Documents({ profile }) {
       await supabase.from('documents').update({ current_version_id: nv.id }).eq('id', edit.id)
       let reassigned = 0
       if (reassign) {
-        const { data: rows } = await supabase.from('assignments').select('employee_id, profiles!assignments_employee_id_fkey(status)').eq('document_id', edit.id)
-        const ids = [...new Set((rows || []).filter(r => r.profiles?.status === 'active').map(r => r.employee_id))]
+        const { data: rows } = await supabase.from('assignments')
+          .select('employee_id, vehicle_id, profiles!assignments_employee_id_fkey(status)')
+          .eq('document_id', edit.id)
+        // keep the machine each induction belonged to — a vehicle induction is per vehicle,
+        // so re-issue one per person per machine rather than a single unattached copy
+        const seen = new Set(), targets = []
+        for (const r of rows || []) {
+          if (r.profiles?.status !== 'active') continue
+          const key = `${r.employee_id}|${r.vehicle_id || ''}`
+          if (seen.has(key)) continue
+          seen.add(key); targets.push(r)
+        }
         const due = new Date(Date.now() + ((edit.due_days || 14) * 864e5)).toISOString().slice(0, 10)
-        if (ids.length) await supabase.from('assignments').insert(ids.map(id => ({ employee_id: id, document_id: edit.id, source: 'manual', assigned_by: profile.id, due_date: due })))
-        reassigned = ids.length
+        if (targets.length) await supabase.from('assignments').insert(targets.map(r => ({
+          employee_id: r.employee_id, document_id: edit.id, vehicle_id: r.vehicle_id || null,
+          source: 'manual', assigned_by: profile.id, due_date: due,
+        })))
+        reassigned = targets.length
       }
       setMsg(`Published v${newNo}. ${reassign ? `Re-assigned to ${reassigned} staff to re-complete.` : 'Existing completions kept against their version.'}`)
       setSaveAsk(false); setEdit(null); setFile(null); setVersion(null); setBusy(false); load()
@@ -392,13 +426,31 @@ function Documents({ profile }) {
             <button type="button" className="small secondary" onClick={() => setTest({ ...(test || { pass_mark: 80, questions: [] }), ack_statements: [...((test?.ack_statements) || []), ''] })}>+ Add statement</button>
           </div>
 
-          <label style={{ marginTop: 10 }}>Who does this apply to? <span className="muted" style={{ fontWeight: 400 }}>(auto-assigned to new hires who match)</span></label>
+          <label style={{ marginTop: 10 }}>Who does this apply to? <span className="muted" style={{ fontWeight: 400 }}>(auto-assigned to new hires who match)</span>
+            <Info title="These rules decide who gets this document">
+              <b>These rules decide who gets this document.</b><br /><br />
+              Leave everything unticked and it applies to <b>everyone</b>. Tick roles, stores or employment
+              types to narrow it down.<br /><br />
+              New hires who match get it <b>automatically</b> the moment they're set up. Existing staff don't —
+              use “Roll out to current staff now” below for them.
+            </Info>
+          </label>
           <ConditionsBuilder value={edit.conditions} onChange={c => setEdit({ ...edit, conditions: c })} />
 
           {edit.id && (
             <div className="fb-section" style={{ marginTop: 12 }}>
-              <button type="button" className="small secondary" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); const n = await rolloutDoc(edit.id, false); setBusy(false); if (n != null) setMsg(`Assigned to ${n} current staff member${n === 1 ? '' : 's'} (already-assigned staff skipped).`) }}>Roll out to current staff now</button>
-              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Assigns this document to current staff who match the rules above (new hires get it automatically). Save any changes first.</span>
+              <button type="button" className="small secondary" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); const n = await rolloutDoc(edit.id, false); setBusy(false); if (n === 0) setMsg('Nobody new to assign — everyone who matches the rules above already has this document. To push a change to them, use Save then Publish new version and tick the re-complete box.'); else if (n != null) setMsg(`Assigned to ${n} current staff member${n === 1 ? '' : 's'}. Anyone who already had it was left as they were.`) }}>Roll out to current staff now</button>
+              <Info title="When to use Roll out to current staff now">
+                <b>Use this for a document staff don't have yet.</b><br /><br />
+                It gives the document to current staff who match the rules above and <b>don't already have it</b>.<br /><br />
+                Typical uses: a brand-new document, or you've just widened the rules (e.g. added Drivers or another store)
+                and those people need it.<br /><br />
+                <b>It will not send an updated copy to anyone who already has this document</b> — whether they've completed
+                it or not. To push a change to people who already have it, use <b>Save → Publish new version</b> and tick
+                the re-complete box.<br /><br />
+                Save any edits first.
+              </Info>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Gives this document to matching staff who don't already have it. Doesn't update anyone who already has it — use Save → Publish new version for that.</span>
             </div>
           )}
 
@@ -421,14 +473,50 @@ function Documents({ profile }) {
           {saveAsk ? (
             <div className="fb-section" style={{ marginTop: 12 }}>
               <b>Save changes to “{edit.code} {edit.title}”</b>
-              <p className="muted" style={{ fontSize: 13 }}>Have you changed the content in a way staff need to re-acknowledge?</p>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+                Does the change mean staff need to read and sign it again?
+              </p>
+              <div className="ackbox" style={{ fontSize: 12.5, marginBottom: 12 }}>
+                <b>Quick guide</b>
+                <div style={{ marginTop: 4 }}>• Fixed a typo, tidied the wording, changed who it applies to → <b>Minor edit</b></div>
+                <div>• Changed what staff must do or know, new questions, new master file → <b>Publish new version</b></div>
+                <div>• Staff who already signed must do it again → Publish new version <b>and tick the box</b></div>
+              </div>
               <button className="secondary" style={{ marginTop: 4 }} onClick={() => { setSaveAsk(false); saveInPlace() }} disabled={busy}>Minor edit — just update (no re-sign)</button>
+              <Info title="What a minor edit does">
+                <b>Minor edit — nothing is sent to anyone.</b><br /><br />
+                Saves your changes onto the <b>current version</b>. The version number doesn't change and no
+                to-do items are created.<br /><br />
+                Anyone who opens the document from now on sees the updated wording. People who already
+                completed it stay completed and are <b>not</b> asked to look again.<br /><br />
+                Right for typos, formatting, adding an acknowledgement statement, or changing the
+                “who does this apply to” rules.
+              </Info>
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #e0e6e0' }}>
-                <label>Publish as a new version — what changed?</label>
+                <label>Publish as a new version — what changed?
+                  <Info title="What publishing a new version does">
+                    <b>Publish new version — a clean break in the record.</b><br /><br />
+                    Creates v{(version?.version_no || 1) + 1}. The current version is archived, not deleted —
+                    everyone who already signed stays bound to the exact version they signed, which is what
+                    matters if a record is ever questioned.<br /><br />
+                    On its own this does <b>not</b> give anyone new work: people who already have the document
+                    keep their existing status. Tick the box below to make them do it again.<br /><br />
+                    Your note below shows in the version history, so there's a record of why it changed.
+                  </Info>
+                </label>
                 <input value={changeNote} onChange={e => setChangeNote(e.target.value)} placeholder="e.g. Updated section 3 obligations" />
                 <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, marginTop: 8 }}>
                   <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={reassign} onChange={e => setReassign(e.target.checked)} />
-                  <span>Require staff who already completed this to re-complete the new version (pushes it to their to-do)</span>
+                  <span>Require staff who already completed this to re-complete the new version (pushes it to their to-do)
+                    <Info title="What the re-complete box does">
+                      <b>Ticked:</b> everyone active who has this document gets it back on their to-do list for the
+                      new version. Their old signed copy moves to their previous records — it isn't lost.<br /><br />
+                      <b>Not ticked:</b> nobody is asked to do anything. The new version applies to future
+                      assignments and new hires only.<br /><br />
+                      Tick it when the change affects what staff must actually do — a new hazard, a changed
+                      procedure, new understanding questions. Leave it unticked for housekeeping.
+                    </Info>
+                  </span>
                 </label>
                 <div className="row" style={{ marginTop: 10 }}>
                   <button onClick={publishNewVersion} disabled={busy}>{busy ? 'Publishing…' : 'Publish new version'}</button>
