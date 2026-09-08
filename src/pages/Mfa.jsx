@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 // Two-factor (TOTP) screen. mode = 'enroll' (first-time setup, shows QR) or 'challenge' (enter code).
-export default function Mfa({ mode = 'challenge', onDone }) {
+export default function Mfa({ mode = 'challenge', reason = null, onDone }) {
   const [factorId, setFactorId] = useState(null)
   const [qr, setQr] = useState(null)
   const [secret, setSecret] = useState('')
@@ -45,7 +45,10 @@ export default function Mfa({ mode = 'challenge', onDone }) {
     setBusy(true)
     const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: code.replace(/\s/g, '') })
     setBusy(false)
-    if (error) { setErr('That code was not accepted. Check your authenticator app and try again.'); return }
+    if (error && !/already|verified/i.test(error.message || '')) {
+      setErr('That code was not accepted. Check your authenticator app and try again — codes change every 30 seconds.')
+      return
+    }
     onDone && onDone()
   }
 
@@ -65,8 +68,12 @@ export default function Mfa({ mode = 'challenge', onDone }) {
           </>
         ) : (
           <>
-            <h2 style={{ textAlign: 'center', marginTop: 0 }}>Enter your verification code</h2>
-            <p className="muted" style={{ textAlign: 'center', fontSize: 13 }}>Open your authenticator app and enter the current 6-digit code for Nuway HR.</p>
+            <h2 style={{ textAlign: 'center', marginTop: 0 }}>{reason === 'reset' ? 'Confirm it’s you' : 'Enter your verification code'}</h2>
+            <p className="muted" style={{ textAlign: 'center', fontSize: 13 }}>
+              {reason === 'reset'
+                ? 'Your account uses two-factor authentication, so we need your authenticator code before you choose a new password. Open your authenticator app and enter the current 6-digit code for Nuway HR.'
+                : 'Open your authenticator app and enter the current 6-digit code for Nuway HR.'}
+            </p>
           </>
         )}
         <form onSubmit={submit}>

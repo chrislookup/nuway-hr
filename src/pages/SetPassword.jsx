@@ -15,7 +15,13 @@ export default function SetPassword({ mode = 'first', onDone }) {
     if (pw !== pw2) { setErr('The two passwords don’t match.'); return }
     setBusy(true)
     const { error } = await supabase.auth.updateUser({ password: pw })
-    if (error) { setErr(error.message); setBusy(false); return }
+    if (error) {
+      const aal = /aal2|assurance/i.test(error.message || '')
+      setErr(aal
+        ? 'We need your authenticator code before the password can be changed. Please close this page and open the reset link again — you’ll be asked for your 6-digit code first.'
+        : error.message)
+      setBusy(false); return
+    }
     const { data: { user } } = await supabase.auth.getUser()
     if (user) await supabase.from('profiles').update({ must_set_password: false }).eq('id', user.id)
     setBusy(false)

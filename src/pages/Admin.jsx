@@ -1354,6 +1354,23 @@ function Security({ profile }) {
           <input type="number" min="10" max="600" value={s.idle_warn_seconds}
             onChange={e => set({ idle_warn_seconds: Number(e.target.value) })} /></div>
       </div>
+      <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #e0e6e0' }}>
+        <div className="row between">
+          <h3 style={{ margin: 0 }}>Two-factor on every browser session</h3>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={s.mfa_every_session !== false}
+              onChange={e => set({ mfa_every_session: e.target.checked })} />
+            <b>{s.mfa_every_session !== false ? 'On' : 'Off'}</b>
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 13 }}>
+          <b>On:</b> managers and admins must enter their authenticator code each time the app is opened in a
+          new browser session — so a remembered login found on a shared computer, or reopened from browser
+          history, still can't get in without the phone.<br />
+          <b>Off:</b> a remembered login opens straight into the portal until the session expires.
+          Employees are never asked for a code either way.
+        </p>
+      </div>
       <button style={{ marginTop: 14 }} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
     </div>
   )

@@ -17,6 +17,8 @@ import IdleTimeout from './components/IdleTimeout'
 import PreEmployment from './pages/PreEmployment'
 import Library from './pages/Library'
 
+const SESSION_MFA_KEY = 'nuwayhr_mfa_ok'
+
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
@@ -55,23 +57,43 @@ export default function App() {
   useEffect(() => {
     if (!session || !profile) { setMfa(undefined); return }
     let alive = true
-    supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data, error }) => {
+    ;(async () => {
+      const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (!alive) return
       if (error || !data) { setMfa(null); return } // fail open on transient error, don't lock everyone out
       const isMgr = profile.tier === 'manager' || profile.tier === 'admin'
-      if (data.currentLevel === 'aal2') setMfa(null)
+      if (data.currentLevel === 'aal2') {
+        // A session left behind on a shared device (or found in browser history) shouldn't walk
+        // straight in. Managers and admins re-enter their authenticator code once per browser session.
+        let perSession = true
+        const { data: cfg } = await supabase.from('app_settings').select('mfa_every_session').eq('id', 1).maybeSingle()
+        if (cfg && cfg.mfa_every_session === false) perSession = false
+        if (!alive) return
+        let done = null
+        try { done = sessionStorage.getItem(SESSION_MFA_KEY) } catch { done = session.user.id }
+        setMfa(isMgr && perSession && done !== session.user.id ? 'challenge' : null)
+      }
       else if (data.nextLevel === 'aal2') setMfa('challenge')
       else if (isMgr) setMfa('enroll')
       else setMfa(null)
-    })
+    })()
     return () => { alive = false }
   }, [session, profile, mfaReload])
 
+  function mfaPassed() {
+    try { sessionStorage.setItem(SESSION_MFA_KEY, session.user.id) } catch { /* private mode */ }
+    setMfaReload(r => r + 1)
+  }
+
   if (session === undefined) return null
   if (!session) return <Login />
+  if (!profile) return null
+  if (mfa === undefined) return null
+  // Two-factor first. A reset link only proves control of the mailbox, and Supabase (rightly)
+  // won't change the password of a 2FA account until the session is fully verified.
+  if (mfa === 'challenge') return <Mfa mode="challenge" reason={recovery ? 'reset' : null} onDone={mfaPassed} />
   // Password reset link → force a new password before continuing
   if (recovery) return <SetPassword mode="reset" onDone={() => setRecovery(false)} />
-  if (!profile) return null
   // First login after invite → force a password to be set
   if (profile.must_set_password) return <SetPassword mode="first" onDone={() => setReload(r => r + 1)} />
   // Past employees lose portal access (admins are never blocked)
@@ -87,10 +109,8 @@ export default function App() {
     )
   }
 
-  // Two-factor step (managers/admins enrol; anyone with 2FA verifies) before the portal loads
-  if (mfa === undefined) return null
-  if (mfa === 'enroll') return <Mfa mode="enroll" onDone={() => setMfaReload(r => r + 1)} />
-  if (mfa === 'challenge') return <Mfa mode="challenge" onDone={() => setMfaReload(r => r + 1)} />
+  // Managers/admins without an authenticator yet set one up before the portal loads
+  if (mfa === 'enroll') return <Mfa mode="enroll" onDone={mfaPassed} />
 
   const tier = profile.tier
   const isMgr = tier === 'manager' || tier === 'admin'
