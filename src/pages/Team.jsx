@@ -10,6 +10,8 @@ export default function Team({ profile }) {
   const [rej, setRej] = useState({ id: null, reason: '' })
   const [gaps, setGaps] = useState([])
   const [mine, setMine] = useState([])
+  const [otherReviews, setOtherReviews] = useState([])
+  const [showAll, setShowAll] = useState(false)
   const [sort, setSort] = useState({ key: 'name', dir: 1 })
   const [filterLoc, setFilterLoc] = useState('')
   const [filterRole, setFilterRole] = useState('')
@@ -33,7 +35,7 @@ export default function Team({ profile }) {
     setPeople((profs || []).map(p => ({ ...p, stats: stats[p.id] || { total: 0, done: 0, overdue: 0 } })))
 
     const { data: rev } = await supabase.from('assignments')
-      .select('*, documents(code, title), profiles!assignments_employee_id_fkey(first_name, last_name)')
+      .select('*, documents(code, title, requires_admin_signoff), profiles!assignments_employee_id_fkey(first_name, last_name)')
       .eq('status', 'awaiting_review').order('completed_at', { ascending: false })
     // nobody signs off their own paperwork — my own submissions wait for someone else
     const revIds = (rev || []).map(x => x.id)
@@ -45,7 +47,38 @@ export default function Team({ profile }) {
       for (const t of att || []) if (!quiz[t.assignment_id]) quiz[t.assignment_id] = t
     }
     const withQuiz = (rev || []).map(x => ({ ...x, quiz: quiz[x.id] || null }))
-    setReviews(withQuiz.filter(a => a.employee_id !== profile.id))
+
+    // An admin can see every store, but their queue shouldn't be everyone else's work.
+    // Theirs to action = documents set to admin sign-off, plus anyone no store manager covers
+    // (staff at a store with no manager, and managers' own paperwork).
+    let coveredIds = new Set()
+    if (profile.tier === 'admin') {
+      const [{ data: mla }, { data: caps }, { data: els2 }] = await Promise.all([
+        supabase.from('manager_location_access').select('manager_id, location_id'),
+        supabase.from('manager_capabilities').select('manager_id').eq('capability', 'sign_off_training'),
+        supabase.from('employee_locations').select('employee_id, location_id'),
+      ])
+      const canSign = new Set((caps || []).map(c => c.manager_id))
+      const mgrsByLoc = {}
+      for (const m of mla || []) {
+        if (!canSign.has(m.manager_id)) continue
+        ;(mgrsByLoc[m.location_id] = mgrsByLoc[m.location_id] || []).push(m.manager_id)
+      }
+      const locsByEmp = {}
+      for (const e of els2 || []) (locsByEmp[e.employee_id] = locsByEmp[e.employee_id] || []).push(e.location_id)
+      for (const emp of Object.keys(locsByEmp)) {
+        const others = locsByEmp[emp].flatMap(l => mgrsByLoc[l] || []).filter(m => m !== emp)
+        if (others.length) coveredIds.add(emp)   // a store manager can sign for this person
+      }
+    }
+    const forMe = a => {
+      if (a.employee_id === profile.id) return false
+      if (profile.tier !== 'admin') return true                 // managers: RLS already limits them
+      if (a.documents?.requires_admin_signoff) return true      // explicitly an admin job
+      return !coveredIds.has(a.employee_id)                     // nobody else can sign it
+    }
+    setReviews(withQuiz.filter(forMe))
+    setOtherReviews(withQuiz.filter(a => a.employee_id !== profile.id && !forMe(a)))
     setMine(withQuiz.filter(a => a.employee_id === profile.id))
 
     // who is missing a vehicle induction they look like they need?
@@ -183,9 +216,23 @@ export default function Team({ profile }) {
         </div>
       )}
 
-      {reviews.length > 0 && (
+      {(reviews.length > 0 || (profile.tier === 'admin' && otherReviews.length > 0)) && (
         <div className="card">
-          <h2>Awaiting your sign-off ({reviews.length})</h2>
+          <div className="row between" style={{ flexWrap: 'wrap' }}>
+            <h2 style={{ margin: 0 }}>Awaiting your sign-off ({reviews.length})</h2>
+            {profile.tier === 'admin' && otherReviews.length > 0 && (
+              <button className={showAll ? '' : 'secondary'} onClick={() => setShowAll(v => !v)}>
+                {showAll ? 'Hide other stores' : `Show other stores (${otherReviews.length})`}
+              </button>
+            )}
+          </div>
+          {profile.tier === 'admin' && (
+            <p className="muted" style={{ fontSize: 13 }}>
+              Items a store manager can sign are left with them. You'll see anything set to admin sign-off,
+              plus staff no manager covers — including managers' own paperwork.
+            </p>
+          )}
+          {reviews.length === 0 && <p className="muted">Nothing needs your sign-off right now.</p>}
           <table><tbody>
             {reviews.map(a => (
               <tr key={a.id}>
@@ -215,6 +262,43 @@ export default function Team({ profile }) {
               </tr>
             ))}
           </tbody></table>
+          {profile.tier === 'admin' && showAll && otherReviews.length > 0 && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #e0e6e0' }}>
+              <h3 style={{ marginTop: 0 }}>Other stores ({otherReviews.length})</h3>
+              <p className="muted" style={{ fontSize: 13 }}>
+                These belong to a store manager. You can still sign one off if you need to step in.
+              </p>
+              <table><tbody>
+            {otherReviews.map(a => (
+              <tr key={a.id}>
+                <td>{a.profiles?.first_name} {a.profiles?.last_name}</td>
+                <td><b>{a.documents?.code}</b> {a.documents?.title}
+                  {a.quiz && !a.quiz.passed && <div style={{ fontSize: 12, color: '#b00020' }}>
+                    Quiz {Number(a.quiz.score)}% — below the {Number(a.quiz.tests?.pass_mark ?? 80)}% pass mark
+                  </div>}
+                  {a.quiz && a.quiz.passed && <div style={{ fontSize: 12 }} className="muted">Quiz {Number(a.quiz.score)}% — passed</div>}
+                </td>
+                <td className="muted">{fmtDate(a.completed_at)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  {rej.id === a.id ? (
+                    <div className="row" style={{ justifyContent: 'flex-end' }}>
+                      <input autoFocus placeholder="Reason for returning…" value={rej.reason} onChange={e => setRej({ ...rej, reason: e.target.value })} style={{ width: 240 }} />
+                      <button className="danger small" disabled={busyId === a.id || !rej.reason.trim()} onClick={() => reject(a)}>Confirm return</button>
+                      <button className="secondary small" onClick={() => setRej({ id: null, reason: '' })}>Cancel</button>
+                    </div>
+                  ) : (
+                    <>
+                      <Link to={`/record/${a.id}`}><button className="secondary small">View completed</button></Link>{' '}
+                      <button className="small" disabled={busyId === a.id} onClick={() => signOff(a)}>Sign off</button>{' '}
+                      <button className="danger small" onClick={() => setRej({ id: a.id, reason: '' })}>Return</button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+              </tbody></table>
+            </div>
+          )}
         </div>
       )}
       <div className="card">

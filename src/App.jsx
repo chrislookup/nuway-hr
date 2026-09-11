@@ -61,6 +61,9 @@ export default function App() {
       const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (!alive) return
       if (error || !data) { setMfa(null); return } // fail open on transient error, don't lock everyone out
+      // Test accounts are shared for trialling the system, so they can't be tied to one person's
+      // phone. They hold no real employee data and are listed in Admin → Test accounts.
+      if (profile.is_test) { setMfa(null); return }
       const isMgr = profile.tier === 'manager' || profile.tier === 'admin'
       if (data.currentLevel === 'aal2') {
         // A session left behind on a shared device (or found in browser history) shouldn't walk

@@ -725,6 +725,14 @@ function People({ profile }) {
     if (caps.includes(cap)) { await supabase.from('manager_capabilities').delete().eq('manager_id', sel.id).eq('capability', cap); setCaps(caps.filter(x => x !== cap)) }
     else { await supabase.from('manager_capabilities').insert({ manager_id: sel.id, capability: cap }); setCaps([...caps, cap]) }
   }
+  async function resetMfa() {
+    if (!window.confirm(`Remove the authenticator on ${sel.first_name}'s account?\n\nThey'll be asked to set up a new one next time they sign in — use this when someone changes or loses their phone.`)) return
+    const { data, error } = await supabase.rpc('admin_reset_mfa', { target: sel.id })
+    setMsg(error ? error.message
+      : data > 0 ? `Authenticator removed. ${sel.first_name} will set up a new one at next sign-in.`
+      : `${sel.first_name} didn't have an authenticator set up.`)
+  }
+
   async function deactivate() {
     await supabase.from('profiles').update({ status: 'terminated', end_date: new Date().toISOString().slice(0, 10) }).eq('id', sel.id)
     setSel({ ...sel, status: 'terminated' }); setMsg('Marked as past employee — records kept, portal access removed.'); load()
@@ -799,6 +807,20 @@ function People({ profile }) {
                 {CAPABILITIES.map(([c, lab]) => <label key={c}><input type="checkbox" checked={caps.includes(c)} onChange={() => toggleCap(c)} />{lab}</label>)}
               </div>
             </>)}
+            {(sel.tier === 'manager' || sel.tier === 'admin') && !sel.is_test && (
+              <div style={{ marginTop: 16 }}>
+                <button className="secondary small" onClick={resetMfa}>Reset two-factor (new phone)</button>
+                <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+                  Clears their authenticator so they can set it up again — for a lost or replaced phone.
+                </span>
+              </div>
+            )}
+            {sel.is_test && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 16 }}>
+                This is a test account, so it signs in with a password only — no authenticator, which lets
+                anyone testing use it. Never put real employee records on a test account.
+              </p>
+            )}
             {sel.id !== profile.id && (
               sel.status === 'active'
                 ? <button className="danger small" style={{ marginTop: 16 }} onClick={deactivate}>Mark as past employee</button>
