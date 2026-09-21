@@ -1173,10 +1173,14 @@ function Reminders({ profile }) {
   const [log, setLog] = useState([])
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [failures, setFailures] = useState([])
 
   async function load() {
     const { data } = await supabase.from('reminder_settings').select('*').eq('id', 1).single()
     setS(data)
+    const { data: fails } = await supabase.from('email_health')
+      .select('noticed_at, status_code, error').order('noticed_at', { ascending: false }).limit(5)
+    setFailures(fails || [])
     const { data: l } = await supabase.from('reminder_log')
       .select('kind, sent_at, profiles(first_name, last_name), locations(name)')
       .order('sent_at', { ascending: false }).limit(25)
@@ -1306,6 +1310,20 @@ function Reminders({ profile }) {
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Recently sent</h3>
+        {failures.length > 0 && (
+          <div className="error" style={{ marginBottom: 12 }}>
+            <b>Emails are being rejected by the mail provider.</b>
+            <div style={{ fontSize: 13, marginTop: 4 }}>
+              Most recent: {new Date(failures[0].noticed_at).toLocaleString('en-AU')} —
+              {' '}{failures[0].status_code || 'no response'} {String(failures[0].error || '').slice(0, 160)}
+            </div>
+            <div style={{ fontSize: 13, marginTop: 6 }}>
+              Anything listed below may not have arrived. Invitations and password resets use the same
+              provider, so they'll be failing too. Check the SendGrid account (credits, billing, sender
+              verification), then use “Run now” to retry.
+            </div>
+          </div>
+        )}
         {log.length === 0 && <p className="muted">Nothing sent yet.</p>}
         {log.length > 0 && (
           <table style={{ fontSize: 13 }}>
