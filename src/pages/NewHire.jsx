@@ -48,10 +48,18 @@ export default function NewHire({ profile }) {
     }
     const { data, error } = await supabase.functions.invoke('create-employee', { body: f })
     if (error || data?.error) {
-      const msg = data?.error || error?.message || ''
-      setErr(/already|exists|registered|duplicate|non-2xx/i.test(msg)
+      // supabase-js throws on any non-2xx, so the real reason sits in the response body.
+      // Without reading it, every failure looked like a duplicate email — which it usually isn't.
+      let msg = data?.error || ''
+      if (!msg && error?.context?.json) { try { const b = await error.context.json(); msg = b?.error || '' } catch { /* not json */ } }
+      if (!msg) msg = error?.message || ''
+      const duplicate = /already registered|already exists|email_exists|duplicate key/i.test(msg)
+      const mailer = /credits|rate limit|smtp|451|550|quota|sending limit/i.test(msg)
+      setErr(duplicate
         ? 'An account with this email already exists — it may be a past employee. Check the Team page (you can reactivate them there), or use a different email.'
-        : (msg || 'Failed — is the create-employee function deployed?'))
+        : mailer
+          ? `The employee wasn't created because the invitation email was rejected: "${msg}". That's the email provider (SendGrid credits or limits), not this form — once email is working, try again.`
+          : (msg || 'Failed — is the create-employee function deployed?'))
       setBusy(false); return
     }
     // Keep only the vehicle inductions the manager selected (trim any store vehicles auto-assigned)
