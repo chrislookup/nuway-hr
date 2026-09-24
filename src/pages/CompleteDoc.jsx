@@ -79,9 +79,7 @@ export default function CompleteDoc({ profile }) {
   const ackList = test?.ack_statements || []
   const hasQuiz = (test?.questions || []).length > 0
   const assessorIdx = (version?.form_schema?.pages || []).map((p, i) => (p.assessor ? i : -1)).filter(i => i >= 0)
-  // Admin setting "competent person signs from own login": the employee can't fill or sign the competent-person sections
-  const cpSeparate = !!doc?.requires_assessor_signoff
-  const hasAssessor = assessorIdx.length > 0 && !cpSeparate
+  const hasAssessor = assessorIdx.length > 0
   const pdfFields = version?.pdf_field_map || []
   const isPdfForm = doc.doc_type === 'pdf_form' && pdfFields.length > 0 && !!pdfUrl
   const showAgree = needsSig && !guided && !isPdfForm && !isStandard && ackList.length === 0
@@ -160,7 +158,7 @@ export default function CompleteDoc({ profile }) {
   }
   async function submit() {
     setErr('')
-    if (guided) { const gerr = validateGuided(version.form_schema, values, false, cpSeparate); if (gerr) { setErr(gerr); return } }
+    if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
     if (needsRead && !opened) { setErr('Please read the document first — scroll down to the end of it, or use “Open full screen”.'); return }
     if (raUrl && !raAck) { setErr('Please read and tick to acknowledge the vehicle risk assessment.'); return }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
@@ -168,9 +166,9 @@ export default function CompleteDoc({ profile }) {
     if (ackList.length && ackList.some((_, i) => !acks[i])) { setErr('Please tick all the acknowledgement statements to confirm.'); return }
     const norm = x => String(x || '').toLowerCase().replace(/[^a-z]/g, '')
     const selfNames = [signedName, `${profile.first_name || ''} ${profile.last_name || ''}`].map(norm).filter(Boolean)
-    if (hasAssessor) for (const pi of assessorIdx) {
-      if (!values[`cp_${pi}_sig`] || !String(values[`cp_${pi}_name`] || '').trim()) { setErr('Each competent-person section needs the competent person’s name and signature.'); return }
-      if (selfNames.includes(norm(values[`cp_${pi}_name`]))) { setErr('The competent person must be someone other than you — ask your supervisor to sign this section.'); return }
+    for (const pi of assessorIdx) {
+      if (!values[`cp_${pi}_confirm`] || !values[`cp_${pi}_sig`] || !String(values[`cp_${pi}_name`] || '').trim()) { setErr('Each competent-person section must be confirmed, named and signed by the competent person / supervisor.'); return }
+      if (selfNames.includes(norm(values[`cp_${pi}_name`]))) { setErr('The competent person must be someone other than you — hand the device to your supervisor to sign that section.'); return }
     }
     if (isUpload && !files.length) { setErr('Please add at least one photo or file.'); return }
     if (hasQuiz) {
@@ -216,7 +214,7 @@ export default function CompleteDoc({ profile }) {
       }
       const verifier_data = {}
       let firstName = null, firstPath = null
-      if (hasAssessor) for (const pi of assessorIdx) {
+      for (const pi of assessorIdx) {
         const cblob = await (await fetch(values[`cp_${pi}_sig`])).blob()
         const cpath = `${a.employee_id}/${a.id}-${stamp}-cp-${pi}.png`
         const { error: ve } = await supabase.storage.from('signatures').upload(cpath, cblob, { upsert: true })
@@ -246,8 +244,8 @@ export default function CompleteDoc({ profile }) {
         signature_path, signed_name: signedName || null,
         signed_at: needsSig ? new Date().toISOString() : null,
         verifier_name: firstName, verifier_signature_path: firstPath,
-        verifier_data: hasAssessor ? verifier_data : null,
-        verified_at: hasAssessor ? new Date().toISOString() : null,
+        verifier_data: assessorIdx.length ? verifier_data : null,
+        verified_at: assessorIdx.length ? new Date().toISOString() : null,
         user_agent: navigator.userAgent,
       }).select().single()
       if (ce) throw ce
@@ -362,7 +360,7 @@ export default function CompleteDoc({ profile }) {
             </label>
           </div>
         )}
-        {version?.form_schema && <FormRenderer schema={version.form_schema} values={values} onChange={setValues} assessorSeparate={cpSeparate} />}
+        {version?.form_schema && <FormRenderer schema={version.form_schema} values={values} onChange={setValues} />}
         {isUpload && (<>
           <label>Upload evidence <span className="muted" style={{ fontWeight: 400 }}>(take photos or choose files — you can add several; they’re saved as one PDF)</span></label>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 4 }}>

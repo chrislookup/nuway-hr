@@ -394,20 +394,6 @@ function Documents({ profile }) {
               ? <label>Form content (no code — build the sections your staff will complete)</label>
               : <label>Extra sections <span className="muted" style={{ fontWeight: 400 }}>(optional — e.g. questions or a competent-person / supervisor check shown under the document)</span></label>}
             <FormBuilder pages={pages} onChange={setPages} />
-            {pages.some(p => p.assessor) && (
-              <label style={{ fontWeight: 400, marginTop: 8, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <input type="checkbox" style={{ width: 'auto' }} checked={!!edit.requires_assessor_signoff} onChange={e => setEdit({ ...edit, requires_assessor_signoff: e.target.checked })} />
-                <span>Competent person must sign off from <b>their own login</b> (recommended)
-                  <Info title="Competent-person sign-off">
-                    <b>Ticked:</b> the employee submits their part, then the competent-person section goes to a
-                    supervisor/manager's “To assess” list. They complete it and sign from their own login, so the
-                    record shows who really verified it. The employee can't sign it themselves.<br /><br />
-                    <b>Unticked:</b> the supervisor signs on the employee's device at the same time. Quicker, but the
-                    system can only check the name isn't the employee's own.
-                  </Info>
-                </span>
-              </label>
-            )}
           </div>
 
           {edit.doc_type === 'pdf_form' && (
