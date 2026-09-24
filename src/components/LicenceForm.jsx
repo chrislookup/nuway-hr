@@ -125,17 +125,38 @@ export default function LicenceForm({ employeeId, licenceTypes, verifiedBy, onSa
           {type?.validity_months ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Valid for {type.validity_months} months — filled in automatically from the issue date, change it if needed.</div> : null}
         </div>
       </div>
-      <div className="row">
-        <div style={{ flex: 1 }}><label>Front photo (take a photo or choose a file)</label>
-          <input type="file" accept="image/*" capture="environment" onChange={e => setFront(e.target.files?.[0] || null)} /></div>
-        <div style={{ flex: 1 }}><label>Back photo</label>
-          <input type="file" accept="image/*" capture="environment" onChange={e => setBack(e.target.files?.[0] || null)} /></div>
+      <div className="row" style={{ alignItems: 'flex-start' }}>
+        <FilePick label="Front" file={front} onPick={setFront} />
+        <FilePick label="Back" file={back} onPick={setBack} />
       </div>
+      <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
+        A photo, a scan or a PDF all work. For a PDF that already has both sides, just add it as the front.
+      </p>
       {!verifiedBy && <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Your manager will check this against your physical licence before it counts as verified.</p>}
       {err && <div className="error">{err}</div>}
       <div className="row" style={{ marginTop: 10 }}>
         <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save licence'}</button>
         {onCancel && <button className="secondary" onClick={onCancel}>Cancel</button>}
+      </div>
+    </div>
+  )
+}
+
+// Camera for a quick snap, or any photo/PDF already saved on the device. The old picker was
+// camera/images only, so a licence that arrived as a PDF (e.g. emailed scans) couldn't be chosen.
+function FilePick({ label, file, onPick }) {
+  const pick = e => { onPick(e.target.files?.[0] || null); e.target.value = '' }
+  return (
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <label>{label} of licence</label>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <label className="btnfile" style={{ margin: 0 }}>📷 Take photo
+          <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={pick} /></label>
+        <label className="btnfile" style={{ margin: 0 }}>📎 Choose photo or PDF
+          <input type="file" accept="image/*,application/pdf,.pdf" style={{ display: 'none' }} onChange={pick} /></label>
+      </div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+        {file ? <>✔ {file.name} <a style={{ cursor: 'pointer', marginLeft: 6 }} onClick={() => onPick(null)}>remove</a></> : 'Nothing added yet'}
       </div>
     </div>
   )
