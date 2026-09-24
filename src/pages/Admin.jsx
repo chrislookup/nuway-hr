@@ -1,6 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import FormBuilder from '../components/FormBuilder'
+const PdfViewer = lazy(() => import('../components/PdfViewer'))
 import QuestionBuilder from '../components/QuestionBuilder'
 import RichText from '../components/RichText'
 import SignaturePad from '../components/SignaturePad'
@@ -383,7 +384,7 @@ function Documents({ profile }) {
                 <label style={{ margin: 0 }}>Document preview{file ? ' (new file — save to keep)' : ''}</label>
                 <a href={preview.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Open full screen ↗</a>
               </div>
-              {preview.kind === 'pdf' && <iframe title="preview" src={preview.url} style={{ width: '100%', height: 520, border: '1px solid var(--line)', borderRadius: 8, background: '#fff', marginTop: 6 }} />}
+              {preview.kind === 'pdf' && <Suspense fallback={<p className="muted">Loading…</p>}><PdfViewer url={preview.url} maxHeight="520px" /></Suspense>}
               {preview.kind === 'image' && <img src={preview.url} alt="preview" style={{ maxWidth: '100%', border: '1px solid var(--line)', borderRadius: 8, marginTop: 6 }} />}
               {preview.kind === 'other' && <p className="muted" style={{ marginTop: 6 }}>{preview.name} — can’t preview this file type here. Use “Open full screen”.</p>}
             </div>
@@ -1107,7 +1108,7 @@ function PreviewModal({ doc, catName, preview, mediaUrl, pages, pdfFields, test,
           {preview && !isPdfForm && (
             <div style={{ marginBottom: 4 }}>
               <b style={{ fontSize: 15 }}>📄 Read this document</b>
-              {preview.kind === 'pdf' && <iframe title="doc" src={preview.url} style={{ width: '100%', height: 560, border: '1px solid var(--line)', borderRadius: 8, background: '#fff', marginTop: 6 }} />}
+              {preview.kind === 'pdf' && <div style={{ marginTop: 6 }}><Suspense fallback={<p className="muted">Loading…</p>}><PdfViewer url={preview.url} maxHeight="560px" /></Suspense></div>}
               {preview.kind === 'image' && <img src={preview.url} alt="doc" style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8, marginTop: 6 }} />}
               {preview.kind === 'other' && <p className="muted">Attachment: {preview.name}</p>}
               <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>Please read the full document above before confirming and signing below.</p>
