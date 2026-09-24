@@ -10,7 +10,7 @@ export default function PreEmployment({ profile }) {
   const [sel, setSel] = useState([])          // selected role ids
   const [showCfg, setShowCfg] = useState(false)
   const [msg, setMsg] = useState('')
-  const [nf, setNf] = useState({ code: '', title: '' })
+  const [nf, setNf] = useState({ code: '', title: '', provided: false })
   const [editForm, setEditForm] = useState(null)
   const [defaultCat, setDefaultCat] = useState(null)
   const [age, setAge] = useState(99)
@@ -43,20 +43,22 @@ export default function PreEmployment({ profile }) {
   const ageLabel = age >= 99 ? '18 or over' : age < 16 ? 'Under 16' : 'Under 18 (16–17)'
   const STEPS = [
     'Print the forms below and interview the applicant.',
-    'Collect from the applicant: CV / resume, and front & back copies of any licence the role requires (e.g. driver, forklift, loader).',
+    'Collect from the applicant everything listed under “Collect from the applicant” (copies of licences front & back, CV etc.).',
     'Complete the forms, then STOP & CHECK they are correctly initialled and signed by all relevant parties.',
     'Scan all completed documents.',
     'Name each file per this checklist and the applicant\'s name — e.g. "F5.1.2 – Interview Questions – [Applicant Name]".',
     'Email the completed set to steve@nuway.com.au and brent@nuway.com.au for approval.',
   ]
   function printChecklist() {
-    const items = [...printForms.map(d => `${d.code || ''} ${d.title}`), ...collectItems.map(d => d.title)]
+    const esc = x => String(x || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    const list = arr => arr.length ? `<div>${arr.map(i => `<div><span class=box></span> ${esc(i)}</div>`).join('')}</div>` : '<p style="color:#888">None</p>'
     const w = window.open('', '_blank')
     w.document.write(`<html><head><title>Pre-employment checklist</title><style>body{font-family:Segoe UI,sans-serif;padding:28px;color:#222} h1{color:#008C95} h2{color:#008C95;margin-top:20px;font-size:16px} li{margin:7px 0} .box{display:inline-block;width:14px;height:14px;border:1.5px solid #333;margin-right:8px;vertical-align:middle}</style></head><body>
       <h1>Pre-employment checklist</h1>
       <p><b>Position(s):</b> ${roleNames || '—'} &nbsp; <b>Applicant age:</b> ${ageLabel}</p>
       <p><b>Applicant name:</b> ______________________________ &nbsp;&nbsp; <b>Planned start date:</b> ______________________</p>
-      <h2>Documents required</h2><div>${items.map(i => `<div><span class=box></span> ${i}</div>`).join('')}</div>
+      <h2>Forms to print &amp; complete</h2>${list(printForms.map(d => `${d.code || ''} ${d.title}`))}
+      <h2>Collect from the applicant</h2>${list(collectItems.map(d => d.title))}
       <h2>Process</h2><ol>${STEPS.map(x => `<li>${x.replace(/</g,'&lt;')}</li>`).join('')}</ol>
     </body></html>`)
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300)
@@ -77,9 +79,9 @@ export default function PreEmployment({ profile }) {
   async function addForm() {
     if (!nf.title.trim()) return
     setMsg('')
-    const { error } = await supabase.from('documents').insert({ code: nf.code.trim() || null, title: nf.title.trim(), doc_type: 'standard', pre_employment: true, requires_signature: false, active: true, category_id: defaultCat })
+    const { error } = await supabase.from('documents').insert({ code: nf.code.trim() || null, title: nf.title.trim(), pre_emp_provided: !!nf.provided, doc_type: 'standard', pre_employment: true, requires_signature: false, active: true, category_id: defaultCat })
     if (error) { setMsg(error.message); return }
-    setNf({ code: '', title: '' }); load()
+    setNf({ code: '', title: '', provided: false }); load()
   }
   async function saveFormEdit() {
     const { error } = await supabase.from('documents').update({ code: editForm.code?.trim() || null, title: editForm.title.trim() }).eq('id', editForm.id)
@@ -96,6 +98,11 @@ export default function PreEmployment({ profile }) {
     if (error) { setMsg('Upload failed: ' + error.message); return }
     await supabase.from('document_versions').update({ pdf_path: path }).eq('id', vid)
     setMsg(`PDF uploaded for ${d.code || d.title}.`); load()
+  }
+  async function saveKind(d, provided) {
+    const { error } = await supabase.from('documents').update({ pre_emp_provided: provided }).eq('id', d.id)
+    if (error) { setMsg(error.message); return }
+    load()
   }
   async function saveAge(d, val) {
     await supabase.from('documents').update({ pre_emp_age_max: val === '' ? null : Number(val) }).eq('id', d.id)
@@ -167,7 +174,7 @@ export default function PreEmployment({ profile }) {
               <p className="muted" style={{ fontSize: 12 }}>Add or remove forms, upload each form's PDF, and tick which positions require it.</p>
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Form</th><th>PDF</th><th style={{ textAlign: 'center' }} title="Applies if applicant age is under this">Age &lt;</th>{roles.map(r => <th key={r.id} style={{ textAlign: 'center' }}>{r.name}</th>)}<th /></tr></thead>
+                  <thead><tr><th>Form</th><th title="Form = a Nuway form you print and complete. Collect = something the applicant brings (licence copy, CV, certificate).">Type</th><th>PDF</th><th style={{ textAlign: 'center' }} title="Applies if applicant age is under this">Age &lt;</th>{roles.map(r => <th key={r.id} style={{ textAlign: 'center' }}>{r.name}</th>)}<th /></tr></thead>
                   <tbody>
                     {preDocs.map(d => (
                       <tr key={d.id}>
@@ -176,12 +183,19 @@ export default function PreEmployment({ profile }) {
                         ) : (
                           <td><b>{d.code}</b> {d.title}</td>
                         )}
+                        <td>
+                          <select value={d.pre_emp_provided ? 'collect' : 'form'} onChange={e => saveKind(d, e.target.value === 'collect')} style={{ width: 'auto', padding: '4px 6px' }}>
+                            <option value="form">Form to print</option>
+                            <option value="collect">Collect from applicant</option>
+                          </select>
+                        </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
+                          {d.pre_emp_provided ? <span className="muted" style={{ fontSize: 12 }}>not needed</span> : <>
                           {vers[d.id] && <button className="small secondary" onClick={() => openForm(d)}>View</button>}{' '}
                           <label className="small secondary" style={{ display: 'inline-block', cursor: 'pointer', padding: '4px 10px', border: '1px solid #d9dede', borderRadius: 7, background: '#eef1f1' }}>
                             {vers[d.id] ? 'Replace' : 'Upload'}
                             <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => uploadFormPdf(d, e.target.files?.[0])} />
-                          </label>
+                          </label></>}
                         </td>
                         <td style={{ textAlign: 'center' }}><input type="number" style={{ width: 60 }} value={d.pre_emp_age_max ?? ''} onChange={e => saveAge(d, e.target.value)} placeholder="—" /></td>
                         {roles.map(r => (
@@ -190,16 +204,17 @@ export default function PreEmployment({ profile }) {
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="small secondary" onClick={() => setEditForm({ id: d.id, code: d.code, title: d.title })}>Edit</button> <button className="small" style={{ color: '#b00020' }} onClick={() => deleteForm(d)}>Delete</button></td>
                       </tr>
                     ))}
-                    {preDocs.length === 0 && <tr><td colSpan={roles.length + 4} className="muted">No pre-employment forms yet — add one below.</td></tr>}
+                    {preDocs.length === 0 && <tr><td colSpan={roles.length + 5} className="muted">No pre-employment forms yet — add one below.</td></tr>}
                   </tbody>
                 </table>
               </div>
               <div className="row" style={{ marginTop: 12, alignItems: 'flex-end' }}>
                 <div style={{ width: 100 }}><label>Code</label><input value={nf.code} onChange={e => setNf({ ...nf, code: e.target.value })} placeholder="F5.1.x" /></div>
-                <div style={{ flex: 1 }}><label>New form title</label><input value={nf.title} onChange={e => setNf({ ...nf, title: e.target.value })} placeholder="e.g. Reference Check Consent" /></div>
-                <button className="small" onClick={addForm} disabled={!nf.title.trim()}>+ Add form</button>
+                <div style={{ width: 190 }}><label>Type</label><select value={nf.provided ? 'collect' : 'form'} onChange={e => setNf({ ...nf, provided: e.target.value === 'collect' })}><option value="form">Form to print</option><option value="collect">Collect from applicant</option></select></div>
+                <div style={{ flex: 1 }}><label>New item title</label><input value={nf.title} onChange={e => setNf({ ...nf, title: e.target.value })} placeholder="e.g. Reference Check Consent" /></div>
+                <button className="small" onClick={addForm} disabled={!nf.title.trim()}>+ Add</button>
               </div>
-              <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>After adding a form, upload its PDF with the Upload button, then tick the positions that need it.</p>
+              <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>After adding, tick the positions that need it. “Form to print” items need their PDF uploaded; “Collect from applicant” items (licence copies, CV, certificates) don't.</p>
             </>
           )}
         </div>
