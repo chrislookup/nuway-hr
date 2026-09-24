@@ -4,6 +4,7 @@ import { supabase, fmtDate } from '../lib/supabase'
 import SignaturePad from '../components/SignaturePad'
 import FormRenderer, { validateGuided } from '../components/FormRenderer'
 const PdfFieldFiller = lazy(() => import('../components/PdfFieldFiller'))
+const PdfViewer = lazy(() => import('../components/PdfViewer'))
 
 export default function CompleteDoc({ profile }) {
   const { assignmentId } = useParams()
@@ -158,7 +159,7 @@ export default function CompleteDoc({ profile }) {
   async function submit() {
     setErr('')
     if (guided) { const gerr = validateGuided(version.form_schema, values); if (gerr) { setErr(gerr); return } }
-    if (needsRead && !opened) { setErr('Please open and read the document first (use the “Open full screen” button).'); return }
+    if (needsRead && !opened) { setErr('Please read the document first — scroll down to the end of it, or use “Open full screen”.'); return }
     if (raUrl && !raAck) { setErr('Please read and tick to acknowledge the vehicle risk assessment.'); return }
     if (needsSig && (!sig || !signedName.trim())) { setErr('Please type your full name and sign before submitting.'); return }
     if (showAgree && !agree) { setErr('Please tick the acknowledgement box.'); return }
@@ -318,7 +319,7 @@ export default function CompleteDoc({ profile }) {
               <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}><button type="button" className="small secondary">Open full screen ↗</button></a>
             </div>
             {masterIsPdf
-              ? <iframe title="document" src={pdfUrl} style={{ width: '100%', height: 620, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
+              ? <Suspense fallback={<p className="muted">Loading document…</p>}><PdfViewer url={pdfUrl} onFullyViewed={() => setOpened(true)} /></Suspense>
               : masterIsImg
                 ? <img src={pdfUrl} alt="document" style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8 }} />
                 : <a href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)} style={{ textDecoration: 'none' }}>
@@ -348,7 +349,7 @@ export default function CompleteDoc({ profile }) {
               <b style={{ fontSize: 15 }}>⚠️ Vehicle risk assessment — read &amp; acknowledge</b>
               <a href={raUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}><button type="button" className="small secondary">Open full screen ↗</button></a>
             </div>
-            <iframe title="risk assessment" src={raUrl} style={{ width: '100%', height: 500, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
+            <Suspense fallback={<p className="muted">Loading risk assessment…</p>}><PdfViewer url={raUrl} maxHeight="70vh" /></Suspense>
             <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400, marginTop: 8 }}>
               <input type="checkbox" style={{ width: 'auto', marginTop: 3 }} checked={raAck} onChange={e => setRaAck(e.target.checked)} /> I have read and understood the risk assessment for this vehicle.
             </label>
@@ -430,7 +431,7 @@ export default function CompleteDoc({ profile }) {
             </div>
           )}
           {draftMsg && <div className="success" style={{ marginTop: 10 }}>{draftMsg}</div>}
-          {needsRead && !opened && <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>🔒 Open the document above (the “Open full screen” button) before you can sign.</div>}
+          {needsRead && !opened && <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>🔒 Scroll to the end of the document above (or use “Open full screen”) before you can sign.</div>}
           {err && <div className="error">{err}</div>}
           <div className="row" style={{ marginTop: 14 }}>
             <button onClick={isPdfForm ? submitPdf : submit} disabled={busy || (needsRead && !opened)}>

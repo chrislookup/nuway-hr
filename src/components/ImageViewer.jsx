@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+const PdfViewer = lazy(() => import('./PdfViewer'))
 
 // Shows licence photos inside the app instead of opening a signed link in a new tab.
 // A new tab would leave the URL in the tablet's browser history, and those links keep
@@ -38,7 +39,7 @@ export default function ImageViewer({ bucket = 'licences', path, title, onClose 
         {err && <div className="error">{err}</div>}
         {!url && !err && <p className="muted">Loading…</p>}
         {url && (isPdf
-          ? <iframe title="document" src={url} style={{ width: '100%', height: '70vh', border: '1px solid var(--line)', borderRadius: 8 }} />
+          ? <Suspense fallback={<p className="muted">Loading…</p>}><PdfViewer url={url} maxHeight="72vh" /></Suspense>
           : <img src={url} alt={title || 'Licence'} style={{ width: '100%', borderRadius: 8 }} />)}
         <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
           Shown inside the app for privacy — this image isn't saved to the browser's history or downloads.

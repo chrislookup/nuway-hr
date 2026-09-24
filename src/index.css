@@ -62,7 +62,7 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted);
 .checkgrid input { width: auto; }
 .doc-content { background: #fafbfa; border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 12px 0; }
 video { width: 100%; border-radius: 8px; }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .app { flex-direction: column; }
   .sidebar { width: 100%; flex-direction: row; align-items: center; flex-wrap: wrap; padding: 8px; }
   .sidebar nav { flex-direction: row; flex-wrap: wrap; margin: 0; }
@@ -120,3 +120,12 @@ video { width: 100%; border-radius: 8px; }
 
 .btnfile { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--teal); color:var(--teal); background:#fff; border-radius:6px; cursor:pointer; font-size:14px; font-weight:600; }
 .btnfile:hover { background:#f0fafa; }
+
+/* touch screens: bigger tap targets, no accidental double-tap zoom on controls */
+@media (pointer: coarse) {
+  button, .btn { min-height: 38px; }
+  button.small { min-height: 32px; }
+  input[type=checkbox], input[type=radio] { width: 20px; height: 20px; }
+  button, a, input, select, label { touch-action: manipulation; }
+}
+img, canvas, video { max-width: 100%; }

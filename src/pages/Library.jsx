@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, Suspense, lazy, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+const PdfViewer = lazy(() => import('../components/PdfViewer'))
 import FormRenderer, { validateGuided } from '../components/FormRenderer'
 
 function esc(s) { return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) }
@@ -115,7 +116,7 @@ export default function Library({ profile, kind }) {
         {pdfUrl && (
           <div className="card">
             <div className="row between"><b>Document</b><a href={pdfUrl} target="_blank" rel="noreferrer">Open full screen / print ↗</a></div>
-            <iframe title="doc" src={pdfUrl} style={{ width: '100%', height: 560, border: '1px solid var(--line)', borderRadius: 8, background: '#fff', marginTop: 8 }} />
+            <div style={{ marginTop: 8 }}><Suspense fallback={<p className="muted">Loading document…</p>}><PdfViewer url={pdfUrl} /></Suspense></div>
           </div>
         )}
 

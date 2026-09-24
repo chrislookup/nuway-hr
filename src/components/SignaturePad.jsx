@@ -1,19 +1,46 @@
 import { useRef, useEffect, useState } from 'react'
 
+const H = 160 // css height of the pad
+
 export default function SignaturePad({ onChange }) {
   const ref = useRef(null)
   const drawing = useRef(false)
+  const hasInk = useRef(false)
   const [empty, setEmpty] = useState(true)
 
-  useEffect(() => {
+  // size the drawing surface to the pad's current on-screen width. Called on load and
+  // whenever the screen changes size — e.g. a tablet rotated between portrait and landscape —
+  // otherwise the ink lands away from the finger. Any signature already drawn is kept, rescaled.
+  function fit() {
     const c = ref.current
-    c.width = c.offsetWidth * 2
-    c.height = 320
+    if (!c) return
+    const w = c.offsetWidth
+    if (!w || c.width === w * 2) return
+    let keep = null
+    if (hasInk.current) { keep = document.createElement('canvas'); keep.width = c.width; keep.height = c.height; keep.getContext('2d').drawImage(c, 0, 0) }
+    c.width = w * 2
+    c.height = H * 2
     const ctx = c.getContext('2d')
-    ctx.scale(2, 2)
+    if (keep) ctx.drawImage(keep, 0, 0, c.width, c.height)
+    ctx.setTransform(2, 0, 0, 2, 0, 0)
     ctx.lineWidth = 2
     ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
     ctx.strokeStyle = '#1d2620'
+  }
+
+  useEffect(() => {
+    fit()
+    const onResize = () => fit()
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null
+    if (ro) ro.observe(ref.current)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+      if (ro) ro.disconnect()
+    }
   }, [])
 
   function pos(e) {
@@ -23,6 +50,7 @@ export default function SignaturePad({ onChange }) {
   }
   function start(e) {
     e.preventDefault()
+    fit()
     drawing.current = true
     const ctx = ref.current.getContext('2d')
     const p = pos(e)
@@ -34,27 +62,29 @@ export default function SignaturePad({ onChange }) {
     const ctx = ref.current.getContext('2d')
     const p = pos(e)
     ctx.lineTo(p.x, p.y); ctx.stroke()
-    if (empty) setEmpty(false)
+    if (!hasInk.current) { hasInk.current = true; setEmpty(false) }
   }
   function end() {
     if (!drawing.current) return
     drawing.current = false
-    onChange(empty ? null : ref.current.toDataURL('image/png'))
+    onChange(hasInk.current ? ref.current.toDataURL('image/png') : null)
   }
   function clear() {
     const c = ref.current
-    c.getContext('2d').clearRect(0, 0, c.width, c.height)
+    const ctx = c.getContext('2d')
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height); ctx.restore()
+    hasInk.current = false
     setEmpty(true)
     onChange(null)
   }
 
   return (
     <div>
-      <canvas ref={ref} className="sigpad" style={{ height: 160 }}
+      <canvas ref={ref} className="sigpad" style={{ height: H, width: '100%', touchAction: 'none' }}
         onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
         onTouchStart={start} onTouchMove={move} onTouchEnd={end} />
       <div className="row between" style={{ marginTop: 6 }}>
-        <span className="muted">Sign above with mouse or finger</span>
+        <span className="muted">{empty ? 'Sign above with mouse or finger' : 'Signed — tap Clear to redo'}</span>
         <button type="button" className="secondary small" onClick={clear}>Clear</button>
       </div>
     </div>
