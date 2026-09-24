@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
 import { suggestInductions } from '../lib/inductions'
+import SwpMatrix from '../components/SwpMatrix'
 
 export default function Team({ profile }) {
   const [people, setPeople] = useState(null)
@@ -10,6 +11,7 @@ export default function Team({ profile }) {
   const [rej, setRej] = useState({ id: null, reason: '' })
   const [gaps, setGaps] = useState([])
   const [mine, setMine] = useState([])
+  const [view, setView] = useState('team')
   const [otherReviews, setOtherReviews] = useState([])
   const [showAll, setShowAll] = useState(false)
   const [sort, setSort] = useState({ key: 'name', dir: 1 })
@@ -174,9 +176,24 @@ export default function Team({ profile }) {
     </th>
   )
 
+  if (view === 'swp') return (
+    <div>
+      <h1>Team</h1>
+      <div className="pill-tabs">
+        <button onClick={() => setView('team')}>Team</button>
+        <button className="on">SWP training matrix</button>
+      </div>
+      <SwpMatrix profile={profile} />
+    </div>
+  )
+
   return (
     <div>
       <h1>Team</h1>
+      <div className="pill-tabs">
+        <button className="on">Team</button>
+        <button onClick={() => setView('swp')}>SWP training matrix</button>
+      </div>
       {mine.length > 0 && (
         <div className="card">
           <h2>Your own items ({mine.length})</h2>
