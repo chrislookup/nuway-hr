@@ -435,11 +435,11 @@ function Documents({ profile }) {
               use “Roll out to current staff now” below for them.
             </Info>
           </label>
-          <ConditionsBuilder value={edit.conditions} onChange={c => setEdit({ ...edit, conditions: c })} />
+          <ConditionsBuilder value={edit.conditions} onChange={c => setEdit({ ...edit, conditions: c })} manualOnly={!!edit.manual_only} onManualOnly={v => setEdit({ ...edit, manual_only: v })} />
 
           {edit.id && (
             <div className="fb-section" style={{ marginTop: 12 }}>
-              <button type="button" className="small secondary" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); const n = await rolloutDoc(edit.id, false); setBusy(false); if (n === 0) setMsg('Nobody new to assign — everyone who matches the rules above already has this document. To push a change to them, use Save then Publish new version and tick the re-complete box.'); else if (n != null) setMsg(`Assigned to ${n} current staff member${n === 1 ? '' : 's'}. Anyone who already had it was left as they were.`) }}>Roll out to current staff now</button>
+              {edit.manual_only ? (<span className="muted" style={{ fontSize: 12 }}>Manually assigned only — give it to people from their profile with <b>+ Assign extra document</b>.</span>) : (<><button type="button" className="small secondary" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); const n = await rolloutDoc(edit.id, false); setBusy(false); if (n === 0) setMsg('Nobody new to assign — everyone who matches the rules above already has this document. To push a change to them, use Save then Publish new version and tick the re-complete box.'); else if (n != null) setMsg(`Assigned to ${n} current staff member${n === 1 ? '' : 's'}. Anyone who already had it was left as they were.`) }}>Roll out to current staff now</button>
               <Info title="When to use Roll out to current staff now">
                 <b>Use this for a document staff don't have yet.</b><br /><br />
                 It gives the document to current staff who match the rules above and <b>don't already have it</b>.<br /><br />
@@ -450,7 +450,7 @@ function Documents({ profile }) {
                 the re-complete box.<br /><br />
                 Save any edits first.
               </Info>
-              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Gives this document to matching staff who don't already have it. Doesn't update anyone who already has it — use Save → Publish new version for that.</span>
+              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Gives this document to matching staff who don't already have it. Doesn't update anyone who already has it — use Save → Publish new version for that.</span></>)}
             </div>
           )}
 

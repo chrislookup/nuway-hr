@@ -6,7 +6,7 @@ const EMP_LABEL = Object.fromEntries(EMP_TYPES)
 
 // Model: a dimension absent from conditions = "all" (everyone). A stored subset = limited to those.
 // "Company-wide" = no dimension limited at all (conditions empty). Narrowing any dimension drops it.
-export default function ConditionsBuilder({ value, onChange }) {
+export default function ConditionsBuilder({ value, onChange, manualOnly = false, onManualOnly }) {
   const [locs, setLocs] = useState([])
   const [roles, setRoles] = useState([])
   const [adv, setAdv] = useState(false)
@@ -40,8 +40,8 @@ export default function ConditionsBuilder({ value, onChange }) {
     else commit({ ...c, [key]: next })
   }
 
-  const isCompanyWide = Object.keys(c).length === 0
-  function setCompanyWide() { onChange(null) }
+  const isCompanyWide = !manualOnly && Object.keys(c).length === 0
+  function setCompanyWide() { onChange(null); onManualOnly && onManualOnly(false) }
 
   const summary = () => {
     if (isCompanyWide) return 'Everyone'
@@ -49,6 +49,7 @@ export default function ConditionsBuilder({ value, onChange }) {
     if (c.roles?.length) parts.push(c.roles.join(' / '))
     if (c.employment_type?.length) parts.push(c.employment_type.map(e => EMP_LABEL[e] || e).join(' / '))
     if (c.locations?.length) parts.push('at ' + c.locations.join(', '))
+    if (c.age_min) parts.push(c.age_min + ' and over')
     if (c.age_under) parts.push('under ' + c.age_under)
     return parts.join(' · ') || 'Everyone'
   }
@@ -67,10 +68,28 @@ export default function ConditionsBuilder({ value, onChange }) {
 
   return (
     <div className="fb-section" style={{ marginTop: 6 }}>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600, margin: 0 }}>
-        <input type="checkbox" style={{ width: 'auto' }} checked={isCompanyWide} onChange={e => { if (e.target.checked) setCompanyWide() }} />
-        Company-wide — everyone gets this
-      </label>
+      <div className="row" style={{ gap: 24, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600, margin: 0 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={isCompanyWide} onChange={e => { if (e.target.checked) setCompanyWide() }} />
+          Company-wide — everyone gets this
+        </label>
+        {onManualOnly && (
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600, margin: 0 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={manualOnly} onChange={e => onManualOnly(e.target.checked)} />
+            Manually assigned only — nobody gets this automatically
+          </label>
+        )}
+      </div>
+      {manualOnly ? (
+        <div className="ackbox" style={{ fontSize: 13, marginTop: 10 }}>
+          <b>Only goes to people you choose.</b> It won't be given to new hires or included in
+          “Roll out to current staff”. To give it to someone, open their profile (Team → person) and use
+          <b> + Assign extra document</b>.
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Use this for task-specific procedures — e.g. an SWP for equipment only some staff operate.
+          </div>
+        </div>
+      ) : (<>
       <div style={{ fontSize: 13, margin: '6px 0 4px' }}><b>Applies to:</b> <span style={{ color: 'var(--teal)' }}>{summary()}</span></div>
       <p className="muted" style={{ fontSize: 12, margin: '0 0 4px' }}>All options below start ticked (= everyone). Untick to limit — doing so turns off company-wide automatically.</p>
 
@@ -81,11 +100,23 @@ export default function ConditionsBuilder({ value, onChange }) {
       <div style={{ marginTop: 12 }}>
         <label style={{ margin: '0 0 4px' }}>Age limit <span className="muted" style={{ fontWeight: 400 }}>(optional — e.g. young-worker docs)</span></label>
         <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+          <span className="muted" style={{ fontSize: 13 }}>Only staff aged</span>
+          <input type="number" min="1" style={{ width: 80 }} value={c.age_min || ''} onChange={e => commit({ ...c, age_min: e.target.value ? Number(e.target.value) : null })} />
+          <span className="muted" style={{ fontSize: 13 }}>or over</span>
+          <button type="button" className="small secondary" onClick={() => commit({ ...c, age_min: 18 })}>18+ only</button>
+        </div>
+        <div className="row" style={{ alignItems: 'center', gap: 8, marginTop: 6 }}>
           <span className="muted" style={{ fontSize: 13 }}>Only staff under</span>
           <input type="number" min="1" style={{ width: 80 }} value={c.age_under || ''} onChange={e => commit({ ...c, age_under: e.target.value ? Number(e.target.value) : null })} />
           <span className="muted" style={{ fontSize: 13 }}>years</span>
         </div>
+        {(c.age_min || c.age_under) && (
+          <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            Age rules need a date of birth — staff with none recorded won't be given this automatically.
+          </p>
+        )}
       </div>
+      </>)}
 
       <div style={{ marginTop: 10 }}>
         <a style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => { setRaw(value ? JSON.stringify(value, null, 2) : ''); setAdv(a => !a) }}>{adv ? 'Hide' : 'Advanced (edit raw rules)'}</a>
