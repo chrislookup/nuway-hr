@@ -1,7 +1,7 @@
 import SignaturePad from './SignaturePad'
 // Renders either a "guided" schema (pages of clauses + fields + acknowledgements)
 // or the legacy simple { fields:[...] } schema. Editable — writes into `values`.
-export default function FormRenderer({ schema, values, onChange, assessorMode = false }) {
+export default function FormRenderer({ schema, values, onChange, assessorMode = false, assessorSeparate = false }) {
   function set(name, v) { onChange({ ...values, [name]: v }) }
 
   // ---- guided schema (pages/blocks) ----
@@ -9,13 +9,15 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
     return (
       <div className="guided">
         {schema.pages.map((pg, pi) => {
-          const locked = false
+          const locked = assessorSeparate && !!pg.assessor
           return (
           <section key={pi} className="card" style={{ marginTop: pi ? 14 : 0, borderLeft: pg.assessor ? '4px solid var(--green)' : undefined }}>
             {pg.title && <h2>{pg.title}</h2>}
             {pg.assessor && (
               <div className="note-assessor" style={{ marginBottom: 8 }}>
-                Complete this section together with a competent person / supervisor, who signs it off at the end.{pg.assessorNote ? ` (${pg.assessorNote})` : ''}
+                {locked
+                  ? 'After you submit, a competent person / supervisor goes through this section with you and signs it off from their own login.'
+                  : 'Complete this section together with a competent person / supervisor, who signs it off at the end.'}{pg.assessorNote ? ` (${pg.assessorNote})` : ''}
               </div>
             )}
             {(pg.blocks || []).map((b, bi) => {
@@ -71,7 +73,7 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
               }
               return null
             })}
-            {pg.assessor && (
+            {pg.assessor && !locked && (
               <div className="cp-signoff">
                 <p style={{ fontWeight: 600, margin: '0 0 4px' }}>Competent person / supervisor sign-off — this section only</p>
                 <label>Competent person — full name</label>
@@ -118,9 +120,10 @@ export default function FormRenderer({ schema, values, onChange, assessorMode = 
 }
 
 // Validation helper shared with CompleteDoc
-export function validateGuided(schema, values, assessorMode = false) {
+export function validateGuided(schema, values, assessorMode = false, skipAssessor = false) {
   if (!schema?.pages) return null
   for (const pg of schema.pages) {
+    if (skipAssessor && pg.assessor) continue
     for (const b of (pg.blocks || [])) {
       if (b.type === 'field' && b.required && b.input === 'checkbox' && !values[b.name])
         return `Please tick: ${b.label}`
