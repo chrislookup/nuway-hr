@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase, fmtDate } from '../lib/supabase'
 import SignaturePad from '../components/SignaturePad'
 import FormRenderer, { validateGuided } from '../components/FormRenderer'
+import { addOutbox, sendSubmission, isNetworkError, newId } from '../lib/outbox'
 const PdfFieldFiller = lazy(() => import('../components/PdfFieldFiller'))
 const PdfViewer = lazy(() => import('../components/PdfViewer'))
 
@@ -33,6 +34,23 @@ export default function CompleteDoc({ profile }) {
   const [opened, setOpened] = useState(false)
   const [raUrl, setRaUrl] = useState(null)
   const [raAck, setRaAck] = useState(false)
+  const [savedOffline, setSavedOffline] = useState(false)
+  const [online, setOnline] = useState(navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false)
+    window.addEventListener('online', on); window.addEventListener('offline', off)
+    // load now, while there's wifi, anything the submit step needs later
+    import('../lib/filesToPdf').catch(() => {})
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+  // Sends now if possible; otherwise keeps it on this device to upload automatically later.
+  async function sendOrQueue(payload) {
+    if (navigator.onLine) {
+      try { await sendSubmission(payload); return 'sent' } catch (e) { if (!isNetworkError(e)) throw e }
+    }
+    await addOutbox(payload)
+    return 'queued'
+  }
 
   useEffect(() => {
     (async () => {
@@ -88,6 +106,7 @@ export default function CompleteDoc({ profile }) {
 
   async function submitPdf() {
     setErr('')
+    if (!navigator.onLine) { setErr('No internet — this form needs a connection to submit. Tap “Save draft” to keep your work, then submit when you’re back on wifi (or turn on your phone hotspot).'); return }
     for (const f of empFields) {
       if (!f.required) continue
       const val = pdfVals[f.id]
@@ -189,11 +208,8 @@ export default function CompleteDoc({ profile }) {
         passed = score >= Number(test.pass_mark || 80)
         wrongIdx = qs.map((q, i) => (answers[i] === q.answer ? null : i)).filter(i => i !== null)
         if (!passed) {
-          const { error: te } = await supabase.from('test_attempts').insert({
-            assignment_id: a.id, test_id: test.id, answers, score, passed: false, review: 'pending',
-          })
-          if (te) throw te
-          if (a.status === 'not_started') await supabase.from('assignments').update({ status: 'in_progress' }).eq('id', a.id)
+          await sendOrQueue({ id: newId(), kind: 'attempt', user_id: profile.id, created: Date.now(), label: `${doc.code || ''} ${doc.title} (test attempt)`,
+            attempt: { id: newId(), assignment_id: a.id, test_id: test.id, answers, score, passed: false, review: 'pending' } })
           const next = { ...answers }
           for (const i of wrongIdx) delete next[i]      // clear the wrong ones so they must re-answer
           setAnswers(next)
@@ -204,21 +220,21 @@ export default function CompleteDoc({ profile }) {
           return
         }
       }
+      // Build the whole submission on the device first (no internet needed for this part)…
       const stamp = Date.now()
+      const nowIso = new Date().toISOString()
+      const payload = { id: newId(), kind: 'completion', user_id: profile.id, created: stamp, label: `${doc.code || ''} ${doc.title}` }
       let signature_path = null
       if (sig) {
-        const blob = await (await fetch(sig)).blob()
         signature_path = `${a.employee_id}/${a.id}-${stamp}-signature.png`
-        const { error: se } = await supabase.storage.from('signatures').upload(signature_path, blob, { upsert: true })
-        if (se) throw se
+        payload.sig = { path: signature_path, blob: await (await fetch(sig)).blob() }
       }
       const verifier_data = {}
       let firstName = null, firstPath = null
+      payload.cpSigs = []
       for (const pi of assessorIdx) {
-        const cblob = await (await fetch(values[`cp_${pi}_sig`])).blob()
         const cpath = `${a.employee_id}/${a.id}-${stamp}-cp-${pi}.png`
-        const { error: ve } = await supabase.storage.from('signatures').upload(cpath, cblob, { upsert: true })
-        if (ve) throw ve
+        payload.cpSigs.push({ path: cpath, blob: await (await fetch(values[`cp_${pi}_sig`])).blob() })
         verifier_data[String(pi)] = { name: String(values[`cp_${pi}_name`]).trim(), sig: cpath }
         if (!firstName) { firstName = verifier_data[String(pi)].name; firstPath = cpath }
       }
@@ -227,54 +243,77 @@ export default function CompleteDoc({ profile }) {
       if (files.length) {
         if (files.length === 1 && ((files[0].type || '').includes('pdf') || files[0].name.toLowerCase().endsWith('.pdf'))) {
           uploadedPath = `${a.employee_id}/${a.id}-${stamp}-${files[0].name.replace(/[^\w.\-]+/g, '_')}`
-          const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, files[0], { upsert: true })
-          if (fe) throw fe
+          payload.upload = { path: uploadedPath, blob: files[0] }
         } else {
-          const { filesToPdf } = await import('../lib/filesToPdf')
-          const bytes = await filesToPdf(files)
           uploadedPath = `${a.employee_id}/${a.id}-${stamp}-evidence.pdf`
-          const { error: fe } = await supabase.storage.from('completed-docs').upload(uploadedPath, new Blob([bytes], { type: 'application/pdf' }), { upsert: true })
-          if (fe) throw fe
+          try {
+            const { filesToPdf } = await import('../lib/filesToPdf')
+            payload.upload = { path: uploadedPath, blob: new Blob([await filesToPdf(files)], { type: 'application/pdf' }) }
+          } catch (e) {
+            // converter not loaded (offline) — keep the photos and convert when uploading
+            payload.upload = { path: uploadedPath, files: await Promise.all(files.map(async f => ({ name: f.name, type: f.type, blob: new Blob([await f.arrayBuffer()], { type: f.type }) }))) }
+          }
         }
       }
-      const { data: comp, error: ce } = await supabase.from('completions').insert({
+      payload.completion = {
+        id: newId(),
         assignment_id: a.id,
         document_version_id: version?.id,
-        form_data: { ...cleanValues, uploaded_file: uploadedPath, ack: ackList.length ? ackList : null, ra_ack: raUrl ? true : null },
+        form_data: { ...cleanValues, uploaded_file: uploadedPath, ack: ackList.length ? ackList : null, ra_ack: raUrl ? true : null, ...(navigator.onLine ? {} : { completed_offline: true }) },
         signature_path, signed_name: signedName || null,
-        signed_at: needsSig ? new Date().toISOString() : null,
+        signed_at: needsSig ? nowIso : null,
         verifier_name: firstName, verifier_signature_path: firstPath,
         verifier_data: assessorIdx.length ? verifier_data : null,
-        verified_at: assessorIdx.length ? new Date().toISOString() : null,
+        verified_at: assessorIdx.length ? nowIso : null,
         user_agent: navigator.userAgent,
-      }).select().single()
-      if (ce) throw ce
-      if (hasQuiz) {
-        const { error: te } = await supabase.from('test_attempts').insert({
-          assignment_id: a.id, test_id: test.id, answers, score, passed: true, review: 'passed_off',
-        })
-        if (te) throw te
       }
+      if (hasQuiz) payload.attempt = { id: newId(), assignment_id: a.id, test_id: test.id, answers, score, passed: true, review: 'passed_off' }
       let status = 'completed'
       if (doc.requires_manager_signoff || doc.requires_admin_signoff || (doc.requires_assessor_signoff && !hasAssessor)) status = 'awaiting_review'
       const upd = { status, rejection_reason: null }
       if (status === 'completed') {
-        upd.completed_at = new Date().toISOString()
+        upd.completed_at = nowIso
         if (doc.recurrence_months) {
           const d = new Date(); d.setMonth(d.getMonth() + doc.recurrence_months)
           upd.expires_at = d.toISOString().slice(0, 10)
         }
       }
-      const { error: ae } = await supabase.from('assignments').update(upd).eq('id', a.id)
-      if (ae) throw ae
+      payload.assignmentUpdate = upd
+      // …then send it, or keep it on this device until the connection is back.
+      const how = await sendOrQueue(payload)
+      if (how === 'queued') { setSavedOffline(true); setBusy(false); window.scrollTo(0, 0); return }
       if (hasQuiz) { setResult({ score, passed, mark: Number(test.pass_mark || 80) }); setBusy(false); return }
       nav('/')
     } catch (e) { setErr(e.message || String(e)) }
     setBusy(false)
   }
 
+  if (savedOffline) return (
+    <div className="card" style={{ maxWidth: 560, borderLeft: '4px solid var(--green)' }}>
+      <h2 style={{ marginTop: 0 }}>✓ Saved on this tablet</h2>
+      <p><b>{doc.code} — {doc.title}</b>{a.vehicle_id ? ' (this vehicle)' : ''} is signed and saved on this device.</p>
+      <p>There's no internet right now, so it will <b>upload automatically</b> as soon as the tablet is back on wifi. The time it was signed is kept.</p>
+      <div className="ackbox" style={{ fontSize: 14 }}>
+        <b>Before you go:</b> stay signed in on this tablet until the orange “waiting to upload” bar at the top disappears.
+        Don’t clear the browser data. In a hurry? Turn on your phone hotspot and it uploads straight away.
+      </div>
+      <button style={{ marginTop: 12 }} onClick={() => nav('/')} disabled={!online}>{online ? 'Back to my dashboard' : 'Back to dashboard (needs wifi)'}</button>
+    </div>
+  )
+
   return (
     <div>
+      {a.vehicle_id && online && (
+        <div className="ackbox" style={{ marginBottom: 12, fontSize: 13 }}>
+          📶 <b>No wifi at the vehicle?</b> That's fine — this page is now loaded. You can walk out, complete and sign it without internet; it saves on the tablet and uploads when you're back on wifi.
+          Doing several vehicles? Open each induction in its own tab while you're still on wifi. Or turn on your phone hotspot.
+        </div>
+      )}
+      {!online && (
+        <div className="error" style={{ marginBottom: 12 }}>
+          <b>No internet.</b> Keep going — you can complete and sign this page; it will be saved on the tablet and uploaded when you're back on wifi. Don't refresh or close this page.
+        </div>
+      )}
       {result && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(12,25,20,.6)', zIndex: 9998,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>

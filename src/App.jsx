@@ -13,6 +13,8 @@ import SignedRecord from './pages/SignedRecord'
 import AssessDoc from './pages/AssessDoc'
 import Admin from './pages/Admin'
 import StoreSettings from './pages/StoreSettings'
+import OutboxBar from './components/OutboxBar'
+import { listOutbox } from './lib/outbox'
 import IdleTimeout from './components/IdleTimeout'
 import PreEmployment from './pages/PreEmployment'
 import Library from './pages/Library'
@@ -138,9 +140,14 @@ export default function App() {
             {tier === 'admin' && <NavLink to="/admin">Admin</NavLink>}
           </nav>
           <div className="whoami">{profile.first_name} {profile.last_name}<br />{tier.toUpperCase()}</div>
-          <button className="secondary small" onClick={() => supabase.auth.signOut()}>Sign out</button>
+          <button className="secondary small" onClick={async () => {
+            const waiting = (await listOutbox()).filter(i => i.user_id === profile.id).length
+            if (waiting && !window.confirm(`${waiting} signed document${waiting === 1 ? ' is' : 's are'} still waiting to upload from this tablet. If you sign out they'll upload next time you sign in here. Sign out anyway?`)) return
+            supabase.auth.signOut()
+          }}>Sign out</button>
         </div>
         <div className="main">
+          <OutboxBar profile={profile} />
           <Routes>
             <Route path="/" element={<Dashboard profile={profile} />} />
             <Route path="/forms" element={<Library key="form" profile={profile} kind="form" />} />
